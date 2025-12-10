@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ITJ_2025</title>
+    <title>GPXãƒ«ãƒ¼ãƒˆãƒ“ãƒ¥ãƒ¼ã‚¢ (ITJ)</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -43,7 +43,6 @@
             opacity: 0.8;
             border-radius: 2px;
         }
-        /* ƒRƒƒ“ƒg—pƒ}[ƒJ[‚ÌƒJƒXƒ^ƒ}ƒCƒYi•K—v‚Å‚ ‚ê‚Îj */
         .comment-popup .leaflet-popup-content-wrapper {
             border-radius: 8px;
             box-shadow: 0 3px 10px rgba(0,0,0,0.2);
@@ -57,32 +56,32 @@
 </head>
 <body class="h-screen flex flex-col overflow-hidden">
 
-    <!-- ƒwƒbƒ_[ƒGƒŠƒA -->
+    <!-- ãƒ˜ãƒƒãƒ€ãƒ¼ã‚¨ãƒªã‚¢ -->
     <header id="appHeader" class="bg-white shadow-sm z-20 p-3 transition-all duration-300 flex items-center justify-between">
         <h1 class="text-lg font-bold text-gray-800 pl-2">ITJ</h1>
         
-        <!-- ƒtƒ@ƒCƒ‹“Ç‚İ‚İƒ{ƒ^ƒ“ -->
+        <!-- ãƒ•ã‚¡ã‚¤ãƒ«èª­ã¿è¾¼ã¿ãƒœã‚¿ãƒ³ -->
         <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded shadow transition flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
-            GPX‚ğ‘I‘ğ
+            GPXã‚’é¸æŠ
             <input type="file" accept=".gpx" class="hidden" onchange="handleFileSelect(event)">
         </label>
     </header>
 
-    <!-- ’n}•\¦ƒGƒŠƒA -->
+    <!-- åœ°å›³è¡¨ç¤ºã‚¨ãƒªã‚¢ -->
     <main class="flex-1 relative w-full h-full">
         <div id="map" class="w-full h-full"></div>
         
-        <!-- ƒRƒ“ƒgƒ[ƒ‹ƒ{ƒ^ƒ“ŒQ (‰E‰º) -->
+        <!-- ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«ãƒœã‚¿ãƒ³ç¾¤ (å³ä¸‹) -->
         <div class="absolute bottom-6 right-6 z-[1000] flex flex-col gap-3">
-            <!-- ‘S‰æ–Ê•\¦ƒ{ƒ^ƒ“ -->
+            <!-- å…¨ç”»é¢è¡¨ç¤ºãƒœã‚¿ãƒ³ -->
             <button 
                 onclick="toggleZenMode()" 
                 id="fullscreenBtn"
                 class="bg-white text-gray-700 p-3 rounded-full shadow-md hover:bg-gray-100 transition border border-gray-200"
-                title="‘S‰æ–Ê•\¦"
+                title="å…¨ç”»é¢è¡¨ç¤º"
             >
                 <svg id="icon-maximize" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
@@ -92,11 +91,11 @@
                 </svg>
             </button>
 
-            <!-- ”ÍˆÍƒŠƒZƒbƒgƒ{ƒ^ƒ“ -->
+            <!-- ç¯„å›²ãƒªã‚»ãƒƒãƒˆãƒœã‚¿ãƒ³ -->
             <button 
                 onclick="fitBoundsToTrack()" 
                 class="bg-white text-gray-700 p-3 rounded-full shadow-md hover:bg-gray-100 transition border border-gray-200"
-                title="ƒ‹[ƒg‘S‘Ì‚ğ•\¦"
+                title="ãƒ«ãƒ¼ãƒˆå…¨ä½“ã‚’è¡¨ç¤º"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -112,282 +111,19 @@
 
     <script>
         // ==========================================
-        //  İ’è: “Ç‚İ‚ŞGPXƒtƒ@ƒCƒ‹–¼i“¯‚¶ŠK‘w‚É”z’u‚µ‚Ä‚­‚¾‚³‚¢j
+        //  è¨­å®š: èª­ã¿è¾¼ã‚€GPXãƒ•ã‚¡ã‚¤ãƒ«åï¼ˆåŒã˜éšå±¤ã«é…ç½®ã—ã¦ãã ã•ã„ï¼‰
         // ==========================================
         const GPX_FILE_URL = 'course.gpx'; 
 
         // ==========================================
-        //  İ’è: ƒRƒƒ“ƒgƒf[ƒ^ (‚±‚±‚ÉˆÜ“xEŒo“x‚ÆƒƒbƒZ[ƒW‚ğ“o˜^)
+        //  è¨­å®š: ã‚³ãƒ¡ãƒ³ãƒˆãƒ‡ãƒ¼ã‚¿ (ã“ã“ã«ç·¯åº¦ãƒ»çµŒåº¦ã¨ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ã‚’ç™»éŒ²)
         // ==========================================
         const courseComments = [
             { 
+                lat: 34.7540, 
+                lon: 138.7760, 
+                text: "<b><ï¾˜ï¾ï¾Ÿ ã‚¹ã‚¿ãƒ¼ãƒˆï¼šæ¾å´æ¸¯</b><br>é•·ã„æ—…ã®å§‹ã¾ã‚Šï¼æ½®é¢¨ã‚’æ„Ÿã˜ãªãŒã‚‰ã‚¹ã‚¿ãƒ¼ãƒˆã€‚" 
+            },
+            { 
                 lat: 34.8200, 
-                lon: 138.8700, 
-                text: "<b>”ª£“»</b><br>‘O”¼‚ÌRê‚ğ‰z‚¦‚Äˆê‘§B<br>‚±‚±‚©‚ç”ü‚µ‚¢—Åü‚ÖI" 
-            },
-            { 
-                lat: 34.8400, 
-                lon: 138.8900, 
-                text: "<b>”’Ø“»</b><br>ƒAƒbƒvƒ_ƒEƒ“‚ª‘±‚­ƒZƒNƒVƒ‡ƒ“B<br>ƒŠƒYƒ~ƒJƒ‹‚Éi‚İ‚Ü‚µ‚å‚¤B" 
-            },
-            { 
-                lat: 34.8600, 
-                lon: 138.9100, 
-                text: "<b>m‰È“»</b><br>‹ŠE‚ªŠJ‚¯‚ÄÅ‚‚ÌŒiFI<br>°‚ê‚Ä‚¢‚ê‚Î•xmR‚ªŒ©‚¦‚Ü‚·B" 
-            },
-            { 
-                lat: 34.9300, 
-                lon: 138.9400, 
-                text: "<b>’B–R</b><br>ITJ‚ÌƒnƒCƒ‰ƒCƒgB<br>360“x‚Ì‘åƒpƒmƒ‰ƒ}‚ğŠy‚µ‚ñ‚ÅI" 
-            },
-            { 
-                lat: 34.9380, 
-                lon: 138.9430, 
-                text: "<b>¬’B–R</b><br>’B–R‚©‚ç‚Ì‰º‚è‚ğŒo‚Ä­‚µ“o‚è•Ô‚µB<br>ƒS[ƒ‹‚Ü‚Å‚ ‚Æ­‚µI" 
-            }
-        ];
-
-        // ƒfƒtƒHƒ‹ƒg‚ÌƒTƒ“ƒvƒ‹ƒf[ƒ^ (ƒtƒ@ƒCƒ‹‚ªŒ©‚Â‚©‚ç‚È‚¢ê‡‚Ég—p)
-        const sampleGpxData = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Sample" xmlns="http://www.topografix.com/GPX/1/1">
-  <trk>
-    <name>IZU TRAIL JOURNE</name>
-    <trkseg>
-      <trkpt lat="34.7540" lon="138.7760"><ele>5</ele></trkpt>   <!-- ¼è` -->
-      <trkpt lat="34.7600" lon="138.7900"><ele>150</ele></trkpt>
-      <trkpt lat="34.7700" lon="138.8100"><ele>400</ele></trkpt>
-      <trkpt lat="34.7850" lon="138.8300"><ele>700</ele></trkpt> <!-- •ó‘ ‰@ü•Ó -->
-      <trkpt lat="34.8000" lon="138.8500"><ele>500</ele></trkpt>
-      <trkpt lat="34.8200" lon="138.8700"><ele>900</ele></trkpt> <!-- ”ª£“»•t‹ß -->
-      <trkpt lat="34.8400" lon="138.8900"><ele>850</ele></trkpt>
-      <trkpt lat="34.8600" lon="138.9100"><ele>1000</ele></trkpt> <!-- m‰È“»•t‹ß -->
-      <trkpt lat="34.8800" lon="138.9200"><ele>950</ele></trkpt>
-      <trkpt lat="34.9000" lon="138.9300"><ele>800</ele></trkpt> <!-- “y”ì“»•t‹ß -->
-      <trkpt lat="34.9300" lon="138.9400"><ele>900</ele></trkpt> <!-- ’B–R•t‹ß -->
-      <trkpt lat="34.9500" lon="138.9500"><ele>600</ele></trkpt>
-      <trkpt lat="34.9600" lon="138.9600"><ele>300</ele></trkpt>
-      <trkpt lat="34.9720" lon="138.9660"><ele>50</ele></trkpt>  <!-- C‘P› -->
-    </trkseg>
-  </trk>
-</gpx>`;
-
-        let map;
-        let currentTrackLayer = null;
-        let commentLayer = null; // ƒRƒƒ“ƒgƒ}[ƒJ[—p‚ÌƒŒƒCƒ„[
-        let isZenMode = false;
-
-        document.addEventListener('DOMContentLoaded', () => {
-            initMap();
-            loadGpxFile(); // ŠO•”ƒtƒ@ƒCƒ‹‚Ì“Ç‚İ‚İ‚ğ‚İ‚é
-            addComments(); // ƒRƒƒ“ƒg‚ğ’Ç‰Á
-        });
-
-        function initMap() {
-            // ‰Šú•\¦‚Í‰¼‚ÌˆÊ’uiŒã‚ÅfitBounds‚Å’²®‚³‚ê‚Ü‚·j
-            map = L.map('map').setView([34.86, 138.91], 11);
-            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            }).addTo(map);
-            addLegend();
-        }
-
-        // ƒRƒƒ“ƒgƒ}[ƒJ[‚Ì’Ç‰Áˆ—
-        function addComments() {
-            // Šù‘¶‚ÌƒRƒƒ“ƒg‚ª‚ ‚ê‚Îíœ
-            if (commentLayer) {
-                map.removeLayer(commentLayer);
-            }
-
-            commentLayer = L.featureGroup();
-
-            courseComments.forEach(comment => {
-                const marker = L.marker([comment.lat, comment.lon])
-                    .bindPopup(comment.text, {
-                        className: 'comment-popup', // CSSƒNƒ‰ƒX‚ğ“K—p
-                        closeButton: false, // •Â‚¶‚éƒ{ƒ^ƒ“‚ğ”ñ•\¦‚É‚µ‚Ä‚·‚Á‚«‚è‚³‚¹‚é
-                        autoClose: false    // ‘¼‚Ìƒ|ƒbƒvƒAƒbƒv‚ğŠJ‚¢‚Ä‚à•Â‚¶‚È‚¢İ’èi‚¨D‚İ‚Åj
-                    });
-                
-                marker.addTo(commentLayer);
-                
-                // ƒXƒ^[ƒg’n“_‚ÌƒRƒƒ“ƒg‚¾‚¯Å‰‚©‚çŠJ‚¢‚Ä‚¨‚­‰‰o
-                if (comment.text.includes("ƒXƒ^[ƒg")) {
-                    marker.openPopup();
-                }
-            });
-
-            commentLayer.addTo(map);
-        }
-
-        // ŠO•”GPXƒtƒ@ƒCƒ‹‚Ì“Ç‚İ‚İˆ—
-        function loadGpxFile() {
-            fetch(GPX_FILE_URL)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error("HTTP error " + response.status);
-                    }
-                    return response.text();
-                })
-                .then(text => {
-                    console.log(`Loaded ${GPX_FILE_URL}`);
-                    processGPX(text);
-                })
-                .catch(err => {
-                    console.warn(`ŠO•”ƒtƒ@ƒCƒ‹(${GPX_FILE_URL})‚Ì“Ç‚İ‚İ‚É¸”s‚µ‚Ü‚µ‚½BƒTƒ“ƒvƒ‹ƒf[ƒ^‚ğ•\¦‚µ‚Ü‚·B`, err);
-                    // ¸”s‚µ‚½ê‡‚ÍƒTƒ“ƒvƒ‹‚ğ•\¦
-                    processGPX(sampleGpxData);
-                });
-        }
-
-        // ƒtƒ@ƒCƒ‹‘I‘ğ‚Ìˆ— (è“®ƒAƒbƒvƒ[ƒh)
-        function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const xmlContent = e.target.result;
-                processGPX(xmlContent);
-            };
-            reader.readAsText(file);
-        }
-
-        // GPXƒf[ƒ^‚Ì‰ğÍ‚Æ•`‰æi‹¤’Êˆ—j
-        function processGPX(xmlString) {
-            try {
-                // Šù‘¶‚ÌƒŒƒCƒ„[‚ª‚ ‚ê‚Îíœ
-                if (currentTrackLayer) {
-                    map.removeLayer(currentTrackLayer);
-                    currentTrackLayer = null;
-                }
-
-                const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-                const trkpts = xmlDoc.getElementsByTagName("trkpt");
-
-                if (trkpts.length === 0) {
-                    alert("—LŒø‚Èƒgƒ‰ƒbƒNƒ|ƒCƒ“ƒg‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñ‚Å‚µ‚½B");
-                    return;
-                }
-
-                const points = [];
-                for (let i = 0; i < trkpts.length; i++) {
-                    const lat = parseFloat(trkpts[i].getAttribute("lat"));
-                    const lon = parseFloat(trkpts[i].getAttribute("lon"));
-                    const eleTag = trkpts[i].getElementsByTagName("ele")[0];
-                    const ele = eleTag ? parseFloat(eleTag.textContent) : 0;
-                    points.push({ lat, lon, ele });
-                }
-
-                drawColoredTrack(points);
-
-            } catch (err) {
-                console.error("GPX‰ğÍƒGƒ‰[:", err);
-                alert("GPXƒtƒ@ƒCƒ‹‚Ì“Ç‚İ‚İ‚É¸”s‚µ‚Ü‚µ‚½B");
-            }
-        }
-
-        function drawColoredTrack(points) {
-            currentTrackLayer = L.featureGroup();
-            const canvasRenderer = L.canvas({ padding: 0.5 });
-
-            for (let i = 0; i < points.length - 1; i++) {
-                const p1 = points[i];
-                const p2 = points[i+1];
-                const latlng1 = L.latLng(p1.lat, p1.lon);
-                const latlng2 = L.latLng(p2.lat, p2.lon);
-                
-                const dist = map.distance(latlng1, latlng2);
-                const eleDiff = p2.ele - p1.ele;
-                
-                let color = "#66bd63"; // •½’R
-
-                if (dist > 0) {
-                    const gradient = (eleDiff / dist) * 100;
-                    if (gradient >= 5) color = "#d73027";       // ‹}ã‚è
-                    else if (gradient >= 1) color = "#fc8d59";  // ã‚è
-                    else if (gradient > -1) color = "#66bd63";  // •½’R
-                    else if (gradient > -5) color = "#4575b4";  // ‰º‚è
-                    else color = "#313695";                     // ‹}‰º‚è
-                }
-
-                L.polyline([latlng1, latlng2], {
-                    color: color,
-                    weight: 5,
-                    opacity: 0.8,
-                    renderer: canvasRenderer
-                }).addTo(currentTrackLayer);
-            }
-            
-            // ƒXƒ^[ƒg/ƒS[ƒ‹
-            if (points.length > 0) {
-                L.circleMarker([points[0].lat, points[0].lon], {
-                    color: 'green', fillColor: '#0f0', fillOpacity: 1, radius: 6
-                }).bindPopup("Start").addTo(currentTrackLayer);
-
-                L.circleMarker([points[points.length-1].lat, points[points.length-1].lon], {
-                    color: 'black', fillColor: '#fff', fillOpacity: 1, radius: 6
-                }).bindPopup("Goal").addTo(currentTrackLayer);
-            }
-
-            currentTrackLayer.addTo(map);
-            
-            // ƒRƒƒ“ƒgƒ}[ƒJ[‚àl—¶‚µ‚Ä”ÍˆÍ’²®
-            if (commentLayer) {
-                const group = L.featureGroup([currentTrackLayer, commentLayer]);
-                map.fitBounds(group.getBounds(), { padding: [20, 20] });
-            } else {
-                map.fitBounds(currentTrackLayer.getBounds(), { padding: [20, 20] });
-            }
-        }
-
-        function fitBoundsToTrack() {
-            if (currentTrackLayer) {
-                // ƒRƒƒ“ƒgƒ}[ƒJ[‚àl—¶‚µ‚Ä”ÍˆÍ’²®
-                if (commentLayer) {
-                    const group = L.featureGroup([currentTrackLayer, commentLayer]);
-                    map.fitBounds(group.getBounds(), { padding: [20, 20] });
-                } else {
-                    map.fitBounds(currentTrackLayer.getBounds(), { padding: [20, 20] });
-                }
-            }
-        }
-
-        function toggleZenMode() {
-            const header = document.getElementById('appHeader');
-            const maximizeIcon = document.getElementById('icon-maximize');
-            const minimizeIcon = document.getElementById('icon-minimize');
-            isZenMode = !isZenMode;
-
-            if (isZenMode) {
-                header.classList.add('header-hidden');
-                maximizeIcon.classList.add('hidden');
-                minimizeIcon.classList.remove('hidden');
-            } else {
-                header.classList.remove('header-hidden');
-                maximizeIcon.classList.remove('hidden');
-                minimizeIcon.classList.add('hidden');
-            }
-            setTimeout(() => map.invalidateSize(), 300);
-        }
-
-        function addLegend() {
-            const legend = L.control({position: 'topright'});
-            legend.onAdd = function (map) {
-                const div = L.DomUtil.create('div', 'legend');
-                div.innerHTML = `
-                    <div style="font-weight:bold; margin-bottom:4px; border-bottom:1px solid #ddd;">Œù”z</div>
-                    <div><i style="background: #d73027"></i> ‹}‚Èã‚è</div>
-                    <div><i style="background: #fc8d59"></i> ã‚è</div>
-                    <div><i style="background: #66bd63"></i> •½’R</div>
-                    <div><i style="background: #4575b4"></i> ‰º‚è</div>
-                    <div><i style="background: #313695"></i> ‹}‚È‰º‚è</div>
-                `;
-                return div;
-            };
-            legend.addTo(map);
-        }
-    </script>
-</body>
-</html>
+                lon
