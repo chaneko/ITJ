@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPXルートビューア (ITJ)</title>
+    <title>GPXルートビューア (ITJ) v2</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -58,7 +58,7 @@
 
     <!-- ヘッダーエリア -->
     <header id="appHeader" class="bg-white shadow-sm z-20 p-3 transition-all duration-300 flex items-center justify-between">
-        <h1 class="text-lg font-bold text-gray-800 pl-2">ITJ</h1>
+        <h1 class="text-lg font-bold text-gray-800 pl-2">ITJ v2</h1>
         
         <!-- ファイル読み込みボタン -->
         <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded shadow transition flex items-center gap-2">
@@ -115,12 +115,18 @@
         // ==========================================
         const GPX_FILE_URL = 'ITJ_course_2025.gpx'; 
 
+        // ==========================================
+        //  設定: GPXのデータ順序が「ゴール→スタート」の場合は true にしてください
+        // ==========================================
+        const REVERSE_GPX_ORDER = false; 
+
         // グローバル変数の定義
         let map;
         let currentTrackLayer = null;
         let commentLayer = null;
         let isZenMode = false;
         let gpxPoints = []; 
+        let routeTotalDistance = 0; // コース全長
 
         // --- ボタン操作用関数 (windowに直接登録して確実に呼び出せるようにする) ---
 
@@ -276,10 +282,13 @@
                     });
 
                     if (nearestPoint) {
-                        const distKm = (nearestPoint.totalDist / 1000).toFixed(1);
+                        const distStartKm = (nearestPoint.totalDist / 1000).toFixed(1);
+                        const distGoalKm = ((routeTotalDistance - nearestPoint.totalDist) / 1000).toFixed(1);
+                        
                         popupContent += `<hr class="my-2 border-gray-300">`;
                         popupContent += `<b>=ﾘﾍﾜ ルート上の最寄り</b><br>`;
-                        popupContent += `スタートから: <span class="text-blue-600 font-bold text-base">${distKm} km</span> 地点<br>`;
+                        popupContent += `スタートから: <span class="text-blue-600 font-bold text-base">${distStartKm} km</span><br>`;
+                        popupContent += `ゴールまで: <span class="text-green-600 font-bold text-base">${distGoalKm} km</span><br>`;
                         popupContent += `<span class="text-xs text-gray-500">※クリック位置から約 ${Math.round(minDistance)}m</span>`;
                     }
                 }
@@ -348,27 +357,39 @@
                     return;
                 }
 
-                const points = [];
-                let totalDist = 0; // 累積距離計算用
-
+                // 1. 座標データを抽出
+                let rawPoints = [];
                 for (let i = 0; i < trkpts.length; i++) {
                     const lat = parseFloat(trkpts[i].getAttribute("lat"));
                     const lon = parseFloat(trkpts[i].getAttribute("lon"));
                     const eleTag = trkpts[i].getElementsByTagName("ele")[0];
                     const ele = eleTag ? parseFloat(eleTag.textContent) : 0;
-                    
-                    // 距離計算 (2点目以降)
-                    if (i > 0) {
-                        const prev = points[i-1];
-                        const dist = map.distance([prev.lat, prev.lon], [lat, lon]);
-                        totalDist += dist;
-                    }
-
-                    points.push({ lat, lon, ele, totalDist });
+                    rawPoints.push({ lat, lon, ele });
                 }
 
-                // グローバル変数に保存（クリック時の検索用）
+                // 2. 設定に応じて反転 (ゴール→スタートで記録されている場合に対応)
+                if (REVERSE_GPX_ORDER) {
+                    rawPoints.reverse();
+                }
+
+                // 3. 距離計算とポイント生成
+                const points = [];
+                let totalDist = 0;
+
+                for (let i = 0; i < rawPoints.length; i++) {
+                    const p = rawPoints[i];
+                    
+                    if (i > 0) {
+                        const prev = rawPoints[i-1];
+                        const dist = map.distance([prev.lat, prev.lon], [p.lat, p.lon]);
+                        totalDist += dist;
+                    }
+                    points.push({ lat: p.lat, lon: p.lon, ele: p.ele, totalDist: totalDist });
+                }
+
+                // グローバル変数に保存
                 gpxPoints = points;
+                routeTotalDistance = totalDist;
 
                 drawColoredTrack(points);
 
