@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPXルートビューア (ITJ) v2</title>
+    <title>GPXルートビューア (ITJ) v3</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -22,24 +22,60 @@
         }
         #map {
             z-index: 1;
+            background-color: #222;
         }
-        .header-hidden {
-            display: none !important;
+        
+        /* --- 高低図エリア（左上・反透過） --- */
+        #elevationChartContainer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 300px;
+            max-width: 40%; /* スマホ対応 */
+            height: 80px;
+            background: rgba(255, 255, 255, 0.6); /* 反透過 */
+            border-radius: 8px;
+            z-index: 1000;
+            padding: 5px 5px 15px 5px; /* 下に少し余白 */
+            backdrop-filter: blur(2px);
+            pointer-events: none; /* 地図操作の邪魔にならないように */
+            border: 1px solid rgba(255,255,255,0.3);
         }
+
+        /* --- コントロールパネル（下部・コンパクト） --- */
+        .player-controls {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            width: 95%;
+            max-width: 700px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 6px 12px;
+            border-radius: 50px; /* カプセル型 */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* 凡例 */
         .legend {
             background: white;
-            padding: 8px;
+            padding: 6px;
             border-radius: 4px;
             box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-            font-size: 11px;
+            font-size: 10px;
             line-height: 1.4;
             color: #333;
         }
         .legend i {
-            width: 14px;
-            height: 14px;
+            width: 12px;
+            height: 12px;
             float: left;
-            margin-right: 6px;
+            margin-right: 4px;
             opacity: 0.8;
             border-radius: 2px;
         }
@@ -52,57 +88,101 @@
             font-size: 13px;
             line-height: 1.5;
         }
+        
+        /* スライダーのカスタマイズ */
+        input[type=range] {
+            height: 4px;
+            border-radius: 2px;
+            background: #cbd5e1;
+            outline: none;
+            -webkit-appearance: none;
+            flex-grow: 1; /* 横幅いっぱいに */
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            margin-top: -5px;
+        }
     </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden">
-
-    <!-- ヘッダーエリア -->
-    <header id="appHeader" class="bg-white shadow-sm z-20 p-3 transition-all duration-300 flex items-center justify-between">
-        <h1 class="text-lg font-bold text-gray-800 pl-2">ITJ v2</h1>
-        
-        <!-- ファイル読み込みボタン -->
-        <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded shadow transition flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            GPXを選択
-            <input type="file" accept=".gpx" class="hidden" onchange="handleFileSelect(event)">
-        </label>
-    </header>
+<body class="h-screen w-full flex flex-col overflow-hidden">
 
     <!-- 地図表示エリア -->
-    <main class="flex-1 relative w-full h-full">
-        <div id="map" class="w-full h-full"></div>
-        
-        <!-- コントロールボタン群 (右下) -->
-        <div class="absolute bottom-6 right-6 z-[1000] flex flex-col gap-3">
-            <!-- 全画面表示ボタン -->
-            <button 
-                onclick="toggleZenMode()" 
-                id="fullscreenBtn"
-                class="bg-white text-gray-700 p-3 rounded-full shadow-md hover:bg-gray-100 transition border border-gray-200"
-                title="全画面表示"
-            >
-                <svg id="icon-maximize" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                </svg>
-                <svg id="icon-minimize" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
+    <div id="map" class="w-full h-full absolute inset-0"></div>
+    
+    <!-- 高低図エリア（左上・反透過） -->
+    <div id="elevationChartContainer">
+        <!-- viewBoxを設定して座標系を0-100に固定 -->
+        <svg id="elevationSvg" viewBox="0 0 100 100" preserveAspectRatio="none" class="overflow-visible w-full h-full">
+            <defs>
+                <linearGradient id="elevationGradient" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.8"/>
+                    <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.2"/>
+                </linearGradient>
+            </defs>
+            <path id="elevationPath" d="" fill="url(#elevationGradient)" stroke="#2563eb" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+            <circle id="elevationMarker" r="4" fill="#fbbf24" stroke="#fff" stroke-width="1.5" cx="0" cy="0" style="display:none;" vector-effect="non-scaling-stroke"></circle>
+        </svg>
+        <div id="currentEleDisplay" class="absolute top-1 right-1 text-[10px] font-bold text-blue-800 bg-white/70 px-1 rounded"></div>
+    </div>
 
-            <!-- 範囲リセットボタン -->
-            <button 
-                onclick="fitBoundsToTrack()" 
-                class="bg-white text-gray-700 p-3 rounded-full shadow-md hover:bg-gray-100 transition border border-gray-200"
-                title="ルート全体を表示"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-            </button>
+    <!-- 再生コントロールパネル（下部・横並びコンパクト） -->
+    <div class="player-controls">
+        <!-- 再生ボタン -->
+        <button onclick="togglePlay()" id="playBtn" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full shadow transition flex-shrink-0">
+            <svg id="icon-play" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <svg id="icon-pause" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        </button>
+
+        <!-- スライダー -->
+        <input type="range" id="progressSlider" min="0" max="100" value="0" oninput="seekAnimation(this.value)">
+        
+        <!-- 距離情報 -->
+        <div class="flex flex-col items-end text-[10px] leading-tight text-gray-600 w-16 flex-shrink-0">
+            <span id="currentDistDisplay" class="font-bold text-blue-600">0.0km</span>
+            <span id="totalDistDisplay" class="text-gray-400">/ 0.0km</span>
         </div>
-    </main>
+
+        <!-- 速度ボタン -->
+        <button onclick="changeSpeed()" id="speedBtn" class="text-[10px] font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded hover:bg-gray-200 w-8 text-center flex-shrink-0 transition">x1</button>
+
+        <!-- リセットボタン -->
+        <button onclick="resetAnimation()" class="text-gray-400 hover:text-gray-600 flex-shrink-0" title="リセット">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+        </button>
+    </div>
+    
+    <!-- 右下ボタン群（GPX読込・全体表示） -->
+    <div class="absolute bottom-24 right-4 z-[900] flex flex-col gap-3">
+        <!-- GPX読込ボタン -->
+        <label class="cursor-pointer bg-white text-gray-700 p-2.5 rounded-full shadow-lg hover:bg-gray-100 transition border border-gray-200 flex items-center justify-center" title="GPXファイルを読み込む">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <input type="file" accept=".gpx" class="hidden" onchange="handleFileSelect(event)">
+        </label>
+
+        <!-- 全体表示ボタン -->
+        <button onclick="fitBoundsToTrack()" class="bg-white text-gray-700 p-2.5 rounded-full shadow-lg hover:bg-gray-100 transition border border-gray-200" title="ルート全体を表示">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+        </button>
+    </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -111,30 +191,87 @@
 
     <script>
         // ==========================================
-        //  設定: 読み込むGPXファイル名
+        //  設定
         // ==========================================
         const GPX_FILE_URL = 'ITJ_course_2025.gpx'; 
-
-        // ==========================================
-        //  設定: GPXのデータ順序が「ゴール→スタート」の場合は true にしてください
-        // ==========================================
         const REVERSE_GPX_ORDER = true; 
 
-        // グローバル変数の定義
+        // アニメーション設定
+        let PLAY_SPEED = 1; 
+        const SPEED_OPTIONS = [1, 3, 5, 10]; 
+
+        // ==========================================
+        //  コメントデータ (Unicodeエスケープ済み)
+        // ==========================================
+        const courseComments = [
+            { lat: 34.7622, lon: 138.7757, text: "<b>\u{1F3C1} スタート：松崎港</b><br>Aブロックの先頭集団のスタートは迫力あり。" },
+            { lat: 34.7841, lon: 138.8448, text: "<b>\u{1F332} 八瀬峠</b><br>走れる林道。足温存で。" },
+            { lat: 34.8098, lon: 138.8808, text: "<b>\u26F0 諸坪峠</b><br>ここもがっつり走れちゃう。まだ我慢。" },
+            { lat: 34.8600, lon: 138.9100, text: "<b>\u{1F5FB} 仁科峠</b><br>晴れていれば富士山ドーン" },
+            { lat: 34.9300, lon: 138.9400, text: "<b>\u{1F3D4} 達磨山</b><br>ITJのハイライト。<br>360度の大パノラマを楽しんで！" },
+            { lat: 34.9380, lon: 138.9430, text: "<b>\u{1F6B6} 小達磨山</b><br>これがラスボス。後は降るだけ。" },
+            { lat: 34.9720, lon: 138.9660, text: "<b>\u2668 ゴール：修善寺</b><br>最後ロードに出たらみんな走る" }
+        ];
+
+        // ==========================================
+        //  サンプルGPXデータ
+        // ==========================================
+        const sampleGpxLines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<gpx version="1.1" creator="Sample" xmlns="http://www.topografix.com/GPX/1/1">',
+            '  <trk>',
+            '    <name>ITJ Sample</name>',
+            '    <trkseg>',
+            '      <trkpt lat="34.7540" lon="138.7760"><ele>5</ele></trkpt>',
+            '      <trkpt lat="34.7600" lon="138.7850"><ele>50</ele></trkpt>',
+            '      <trkpt lat="34.7650" lon="138.7950"><ele>100</ele></trkpt>',
+            '      <trkpt lat="34.7700" lon="138.8100"><ele>400</ele></trkpt>',
+            '      <trkpt lat="34.7750" lon="138.8200"><ele>550</ele></trkpt>',
+            '      <trkpt lat="34.7850" lon="138.8300"><ele>700</ele></trkpt>',
+            '      <trkpt lat="34.7900" lon="138.8400"><ele>600</ele></trkpt>',
+            '      <trkpt lat="34.8000" lon="138.8500"><ele>500</ele></trkpt>',
+            '      <trkpt lat="34.8100" lon="138.8600"><ele>700</ele></trkpt>',
+            '      <trkpt lat="34.8200" lon="138.8700"><ele>900</ele></trkpt>',
+            '      <trkpt lat="34.8300" lon="138.8800"><ele>880</ele></trkpt>',
+            '      <trkpt lat="34.8400" lon="138.8900"><ele>850</ele></trkpt>',
+            '      <trkpt lat="34.8500" lon="138.9000"><ele>920</ele></trkpt>',
+            '      <trkpt lat="34.8600" lon="138.9100"><ele>1000</ele></trkpt>',
+            '      <trkpt lat="34.8700" lon="138.9150"><ele>980</ele></trkpt>',
+            '      <trkpt lat="34.8800" lon="138.9200"><ele>950</ele></trkpt>',
+            '      <trkpt lat="34.8900" lon="138.9250"><ele>880</ele></trkpt>',
+            '      <trkpt lat="34.9000" lon="138.9300"><ele>800</ele></trkpt>',
+            '      <trkpt lat="34.9100" lon="138.9350"><ele>850</ele></trkpt>',
+            '      <trkpt lat="34.9200" lon="138.9380"><ele>950</ele></trkpt>',
+            '      <trkpt lat="34.9300" lon="138.9400"><ele>980</ele></trkpt>',
+            '      <trkpt lat="34.9380" lon="138.9430"><ele>900</ele></trkpt>',
+            '      <trkpt lat="34.9500" lon="138.9500"><ele>600</ele></trkpt>',
+            '      <trkpt lat="34.9600" lon="138.9600"><ele>300</ele></trkpt>',
+            '      <trkpt lat="34.9720" lon="138.9660"><ele>50</ele></trkpt>',
+            '    </trkseg>',
+            '  </trk>',
+            '</gpx>'
+        ];
+        const sampleGpxData = sampleGpxLines.join("\n");
+
         let map;
         let currentTrackLayer = null;
         let commentLayer = null;
+        let movingMarker = null;
         let isZenMode = false;
         let gpxPoints = []; 
-        let routeTotalDistance = 0; // コース全長
+        let routeTotalDistance = 0;
+        let minEle = 0, maxEle = 0; 
 
-        // --- ボタン操作用関数 (windowに直接登録して確実に呼び出せるようにする) ---
+        let isPlaying = false;
+        let currentAnimFrame = 0; 
+        let animReqId = null;
+        let commentCheckIndex = 0; 
 
-        // ファイル選択時の処理
+        // --- グローバル関数定義 ---
+
         window.handleFileSelect = function(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = function(e) {
                 const xmlContent = e.target.result;
@@ -143,133 +280,87 @@
             reader.readAsText(file);
         };
 
-        // 全画面表示切替
-        window.toggleZenMode = function() {
-            const header = document.getElementById('appHeader');
-            const maximizeIcon = document.getElementById('icon-maximize');
-            const minimizeIcon = document.getElementById('icon-minimize');
-            isZenMode = !isZenMode;
-
-            if (isZenMode) {
-                header.classList.add('header-hidden');
-                maximizeIcon.classList.add('hidden');
-                minimizeIcon.classList.remove('hidden');
-            } else {
-                header.classList.remove('header-hidden');
-                maximizeIcon.classList.remove('hidden');
-                minimizeIcon.classList.add('hidden');
-            }
-            setTimeout(() => map.invalidateSize(), 300);
-        };
-
-        // 範囲リセット
         window.fitBoundsToTrack = function() {
             if (currentTrackLayer) {
-                if (commentLayer) {
-                    const group = L.featureGroup([currentTrackLayer, commentLayer]);
-                    map.fitBounds(group.getBounds(), { padding: [20, 20] });
-                } else {
-                    map.fitBounds(currentTrackLayer.getBounds(), { padding: [20, 20] });
-                }
+                const group = commentLayer ? L.featureGroup([currentTrackLayer, commentLayer]) : currentTrackLayer;
+                map.fitBounds(group.getBounds(), { padding: [20, 20] });
             }
         };
 
-        // ==========================================
-        //  設定: コメントデータ
-        //  絵文字は JavaScript Unicode Escape Sequence (\u{...}) を使用
-        //  これによりHTMLファイルの保存エンコードに関わらず正しく表示されます
-        // ==========================================
-        const courseComments = [
-            { 
-                lat: 34.7622, 
-                lon: 138.7757, 
-                text: "<b>\u{1F3C1} スタート：松崎港</b><br>Aブロックの先頭集団のスタートは迫力あり。" 
-            },
-            { 
-                lat: 34.7841, 
-                lon: 138.8448, 
-                text: "<b>\u{1F332} 八瀬峠</b><br>走れる林道。足温存で。" 
-            },
-            { 
-                lat: 34.8098, 
-                lon: 138.8808, 
-                text: "<b>\u26F0 諸坪峠</b><br>ここもがっつり走れちゃう。まだ我慢。" 
-            },
-            { 
-                lat: 34.8600, 
-                lon: 138.9100, 
-                text: "<b>\u{1F5FB} 仁科峠</b><br>晴れていれば富士山ドーン" 
-            },
-            { 
-                lat: 34.9300, 
-                lon: 138.9400, 
-                text: "<b>\u{1F3D4} 達磨山</b><br>ITJのハイライト。<br>360度の大パノラマを楽しんで！" 
-            },
-            { 
-                lat: 34.9380, 
-                lon: 138.9430, 
-                text: "<b>\u{1F6B6} 小達磨山</b><br>これがラスボス。後は降るだけ。" 
-            },
-            { 
-                lat: 34.9720, 
-                lon: 138.9660, 
-                text: "<b>\u2668 ゴール：修善寺</b><br>最後ロードに出たらみんな走る" 
+        window.togglePlay = function() {
+            if (gpxPoints.length === 0) return;
+            isPlaying = !isPlaying;
+            const playIcon = document.getElementById('icon-play');
+            const pauseIcon = document.getElementById('icon-pause');
+
+            if (isPlaying) {
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+                if (currentAnimFrame >= gpxPoints.length - 1) {
+                    currentAnimFrame = 0;
+                    commentCheckIndex = 0;
+                }
+                animLoop();
+            } else {
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+                cancelAnimationFrame(animReqId);
             }
-        ];
+        };
 
-        // ==========================================
-        //  デフォルトのサンプルデータ（エラー回避のため配列形式で定義）
-        // ==========================================
-        const sampleGpxLines = [
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            '<gpx version="1.1" creator="Sample" xmlns="http://www.topografix.com/GPX/1/1">',
-            '  <trk>',
-            '    <name>IZU TRAIL JOURNEY (Sample)</name>',
-            '    <trkseg>',
-            '      <trkpt lat="34.7540" lon="138.7760"><ele>5</ele></trkpt>',
-            '      <trkpt lat="34.7600" lon="138.7900"><ele>150</ele></trkpt>',
-            '      <trkpt lat="34.7700" lon="138.8100"><ele>400</ele></trkpt>',
-            '      <trkpt lat="34.7850" lon="138.8300"><ele>700</ele></trkpt>',
-            '      <trkpt lat="34.8000" lon="138.8500"><ele>500</ele></trkpt>',
-            '      <trkpt lat="34.8200" lon="138.8700"><ele>900</ele></trkpt>',
-            '      <trkpt lat="34.8400" lon="138.8900"><ele>850</ele></trkpt>',
-            '      <trkpt lat="34.8600" lon="138.9100"><ele>1000</ele></trkpt>',
-            '      <trkpt lat="34.8800" lon="138.9200"><ele>950</ele></trkpt>',
-            '      <trkpt lat="34.9000" lon="138.9300"><ele>800</ele></trkpt>',
-            '      <trkpt lat="34.9300" lon="138.9400"><ele>900</ele></trkpt>',
-            '      <trkpt lat="34.9500" lon="138.9500"><ele>600</ele></trkpt>',
-            '      <trkpt lat="34.9600" lon="138.9600"><ele>300</ele></trkpt>',
-            '      <trkpt lat="34.9720" lon="138.9660"><ele>50</ele></trkpt>',
-            '    </trkseg>',
-            '  </trk>',
-            '</gpx>'
-        ];
-        // 配列を結合して文字列にする（安全策）
-        const sampleGpxData = sampleGpxLines.join("\n");
+        window.resetAnimation = function() {
+            isPlaying = false;
+            cancelAnimationFrame(animReqId);
+            currentAnimFrame = 0;
+            commentCheckIndex = 0;
+            updatePlayerUI();
+            
+            document.getElementById('icon-play').classList.remove('hidden');
+            document.getElementById('icon-pause').classList.add('hidden');
+            
+            map.closePopup();
+            if(gpxPoints.length > 0) {
+                movingMarker.setLatLng([gpxPoints[0].lat, gpxPoints[0].lon]);
+                map.panTo([gpxPoints[0].lat, gpxPoints[0].lon]);
+            }
+        };
 
+        window.seekAnimation = function(val) {
+            currentAnimFrame = parseInt(val);
+            commentCheckIndex = 0;
+            updatePlayerUI();
+        };
+
+        window.changeSpeed = function() {
+            const currentIdx = SPEED_OPTIONS.indexOf(PLAY_SPEED);
+            const nextIdx = (currentIdx + 1) % SPEED_OPTIONS.length;
+            PLAY_SPEED = SPEED_OPTIONS[nextIdx];
+            document.getElementById('speedBtn').textContent = "x" + PLAY_SPEED;
+        };
+
+        // --- 初期化 ---
         document.addEventListener('DOMContentLoaded', () => {
             initMap();
             loadGpxFile();
             addComments();
         });
 
-        // --- 地図の初期化 ---
         function initMap() {
-            map = L.map('map').setView([34.86, 138.91], 11);
-            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            // zoomControl: false で左上のズームボタンを非表示に
+            map = L.map('map', { zoomControl: false }).setView([34.86, 138.91], 11);
+            
+            L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
+                maxZoom: 18,
+                attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
             }).addTo(map);
+            
             addLegend();
 
-            // クリック時のイベント：最寄りルートポイントを探して距離を表示
             map.on('click', function(e) {
                 const clickLat = e.latlng.lat;
                 const clickLng = e.latlng.lng;
                 
-                let popupContent = `<b>クリック地点</b><br>Lat: ${clickLat.toFixed(4)}<br>Lon: ${clickLng.toFixed(4)}`;
-
-                // GPXデータがある場合、最寄り点を探す
+                // コース上のみ判定ロジック
                 if (gpxPoints.length > 0) {
                     let nearestPoint = null;
                     let minDistance = Infinity;
@@ -282,66 +373,42 @@
                         }
                     });
 
-                    if (nearestPoint) {
+                    // 閾値：300メートル以内なら表示
+                    if (nearestPoint && minDistance <= 300) {
                         const distStartKm = (nearestPoint.totalDist / 1000).toFixed(1);
-                        const distGoalKm = ((routeTotalDistance - nearestPoint.totalDist) / 1000).toFixed(1);
                         
-                        popupContent += `<hr class="my-2 border-gray-300">`;
-                        popupContent += `<b>=ﾘﾍﾜ ルート上の最寄り</b><br>`;
-                        popupContent += `スタートから: <span class="text-blue-600 font-bold text-base">${distStartKm} km</span><br>`;
-                        popupContent += `ゴールまで: <span class="text-green-600 font-bold text-base">${distGoalKm} km</span><br>`;
-                        popupContent += `<span class="text-xs text-gray-500">※クリック位置から約 ${Math.round(minDistance)}m</span>`;
+                        let popupContent = `<span class="text-blue-600 font-bold text-base">${distStartKm} km</span>`;
+                        
+                        L.popup()
+                            .setLatLng([nearestPoint.lat, nearestPoint.lon]) // マーカー位置も厳密なコース上に寄せる
+                            .setContent(popupContent)
+                            .openOn(map);
                     }
                 }
-
-                L.popup()
-                    .setLatLng(e.latlng)
-                    .setContent(popupContent)
-                    .openOn(map);
             });
         }
 
-        // --- コメントの追加 ---
         function addComments() {
-            if (commentLayer) {
-                map.removeLayer(commentLayer);
-            }
+            if (commentLayer) map.removeLayer(commentLayer);
             commentLayer = L.featureGroup();
             courseComments.forEach(comment => {
                 const marker = L.marker([comment.lat, comment.lon])
-                    .bindPopup(comment.text, {
-                        className: 'comment-popup',
-                        closeButton: false,
-                        autoClose: false
-                    });
+                    .bindPopup(comment.text, { className: 'comment-popup', closeButton: false, autoClose: false });
                 marker.addTo(commentLayer);
-                if (comment.text.includes("スタート")) {
-                    marker.openPopup();
-                }
             });
             commentLayer.addTo(map);
         }
 
-        // --- GPXファイルの読み込み ---
         function loadGpxFile() {
             fetch(GPX_FILE_URL)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error("HTTP error " + response.status);
-                    }
-                    return response.text();
-                })
-                .then(text => {
-                    console.log(`Loaded ${GPX_FILE_URL}`);
-                    processGPX(text);
-                })
-                .catch(err => {
-                    console.warn(`外部ファイル読み込み失敗: ${err.message}。サンプルデータを表示します。`);
+                .then(r => r.ok ? r.text() : Promise.reject(r.status))
+                .then(text => processGPX(text))
+                .catch(() => {
+                    console.warn("外部GPX読み込み失敗。サンプルを使用。");
                     processGPX(sampleGpxData);
                 });
         }
 
-        // --- GPXデータの解析と描画 ---
         function processGPX(xmlString) {
             try {
                 if (currentTrackLayer) {
@@ -353,46 +420,45 @@
                 const xmlDoc = parser.parseFromString(xmlString, "text/xml");
                 const trkpts = xmlDoc.getElementsByTagName("trkpt");
 
-                if (trkpts.length === 0) {
-                    alert("有効なトラックポイントが見つかりませんでした。");
-                    return;
-                }
+                if (trkpts.length === 0) return alert("トラックデータがありません");
 
-                // 1. 座標データを抽出
                 let rawPoints = [];
                 for (let i = 0; i < trkpts.length; i++) {
                     const lat = parseFloat(trkpts[i].getAttribute("lat"));
                     const lon = parseFloat(trkpts[i].getAttribute("lon"));
-                    const eleTag = trkpts[i].getElementsByTagName("ele")[0];
-                    const ele = eleTag ? parseFloat(eleTag.textContent) : 0;
+                    const ele = parseFloat(trkpts[i].getElementsByTagName("ele")[0]?.textContent || 0);
                     rawPoints.push({ lat, lon, ele });
                 }
 
-                // 2. 設定に応じて反転 (ゴール→スタートで記録されている場合に対応)
-                if (REVERSE_GPX_ORDER) {
-                    rawPoints.reverse();
-                }
+                if (REVERSE_GPX_ORDER) rawPoints.reverse();
 
-                // 3. 距離計算とポイント生成
                 const points = [];
                 let totalDist = 0;
+                minEle = Infinity;
+                maxEle = -Infinity;
 
                 for (let i = 0; i < rawPoints.length; i++) {
                     const p = rawPoints[i];
-                    
                     if (i > 0) {
                         const prev = rawPoints[i-1];
                         const dist = map.distance([prev.lat, prev.lon], [p.lat, p.lon]);
                         totalDist += dist;
                     }
+                    if (p.ele < minEle) minEle = p.ele;
+                    if (p.ele > maxEle) maxEle = p.ele;
                     points.push({ lat: p.lat, lon: p.lon, ele: p.ele, totalDist: totalDist });
                 }
 
-                // グローバル変数に保存
                 gpxPoints = points;
                 routeTotalDistance = totalDist;
 
+                document.getElementById('totalDistDisplay').textContent = "/ " + (totalDist / 1000).toFixed(1) + "km";
+                document.getElementById('progressSlider').max = gpxPoints.length - 1;
+
                 drawColoredTrack(points);
+                drawElevationChart(points);
+                setupMovingMarker();
+                addComments(); 
 
             } catch (err) {
                 console.error("GPX解析エラー:", err);
@@ -400,63 +466,116 @@
             }
         }
 
+        function drawElevationChart(points) {
+            const path = document.getElementById('elevationPath');
+            if (points.length < 2) return;
+            
+            let d = `M 0,100 `;
+            const eleRange = maxEle - minEle;
+            const eleBottom = minEle - eleRange * 0.1;
+            const eleHeight = eleRange * 1.2; 
+
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i];
+                const x = (p.totalDist / routeTotalDistance) * 100;
+                const y = 100 - ((p.ele - eleBottom) / eleHeight) * 100;
+                d += `L ${x.toFixed(2)},${y.toFixed(2)} `;
+            }
+            d += `L 100,100 Z`;
+            path.setAttribute('d', d);
+        }
+
         function drawColoredTrack(points) {
+            if (currentTrackLayer) map.removeLayer(currentTrackLayer);
             currentTrackLayer = L.featureGroup();
             const canvasRenderer = L.canvas({ padding: 0.5 });
 
             for (let i = 0; i < points.length - 1; i++) {
                 const p1 = points[i];
                 const p2 = points[i+1];
-                const latlng1 = L.latLng(p1.lat, p1.lon);
-                const latlng2 = L.latLng(p2.lat, p2.lon);
-                
-                const dist = map.distance(latlng1, latlng2);
                 const eleDiff = p2.ele - p1.ele;
+                const dist = p2.totalDist - p1.totalDist;
                 
-                let color = "#66bd63"; // 平坦
-
+                let color = "#66bd63";
                 if (dist > 0) {
                     const gradient = (eleDiff / dist) * 100;
-                    if (gradient >= 5) color = "#d73027";       // 急上り
-                    else if (gradient >= 1) color = "#fc8d59";  // 上り
-                    else if (gradient > -1) color = "#66bd63";  // 平坦
-                    else if (gradient > -5) color = "#4575b4";  // 下り
-                    else color = "#313695";                     // 急下り
+                    if (gradient >= 5) color = "#d73027";
+                    else if (gradient >= 1) color = "#fc8d59";
+                    else if (gradient > -1) color = "#66bd63";
+                    else if (gradient > -5) color = "#4575b4";
+                    else color = "#313695";
                 }
-
-                L.polyline([latlng1, latlng2], {
-                    color: color,
-                    weight: 5,
-                    opacity: 0.8,
-                    renderer: canvasRenderer
+                L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
+                    color: color, weight: 5, opacity: 0.8, renderer: canvasRenderer
                 }).addTo(currentTrackLayer);
             }
-            
-            // スタート/ゴールマーカー
-            if (points.length > 0) {
-                L.circleMarker([points[0].lat, points[0].lon], {
-                    color: 'green', fillColor: '#0f0', fillOpacity: 1, radius: 6
-                }).bindPopup("Start").addTo(currentTrackLayer);
-
-                L.circleMarker([points[points.length-1].lat, points[points.length-1].lon], {
-                    color: 'black', fillColor: '#fff', fillOpacity: 1, radius: 6
-                }).bindPopup("Goal").addTo(currentTrackLayer);
-            }
-
             currentTrackLayer.addTo(map);
-            
-            // 範囲調整
-            if (commentLayer) {
-                const group = L.featureGroup([currentTrackLayer, commentLayer]);
-                map.fitBounds(group.getBounds(), { padding: [20, 20] });
-            } else {
-                map.fitBounds(currentTrackLayer.getBounds(), { padding: [20, 20] });
+            map.fitBounds(currentTrackLayer.getBounds(), { padding: [20, 20] });
+        }
+
+        function setupMovingMarker() {
+            if (movingMarker) map.removeLayer(movingMarker);
+            if (gpxPoints.length > 0) {
+                movingMarker = L.circleMarker([gpxPoints[0].lat, gpxPoints[0].lon], {
+                    color: 'white', fillColor: 'blue', fillOpacity: 1, radius: 8, weight: 2
+                }).addTo(map);
             }
+        }
+
+        function animLoop() {
+            if (!isPlaying) return;
+            currentAnimFrame += PLAY_SPEED;
+            if (currentAnimFrame >= gpxPoints.length - 1) {
+                currentAnimFrame = gpxPoints.length - 1;
+                updatePlayerUI();
+                window.togglePlay();
+                return;
+            }
+            updatePlayerUI();
+            checkAndShowComment();
+            animReqId = requestAnimationFrame(animLoop);
+        }
+
+        function updatePlayerUI() {
+            if (!gpxPoints[currentAnimFrame]) return;
+            const p = gpxPoints[currentAnimFrame];
+            const latlng = [p.lat, p.lon];
+
+            if (movingMarker) movingMarker.setLatLng(latlng);
+            map.panTo(latlng, { animate: false }); 
+
+            document.getElementById('progressSlider').value = currentAnimFrame;
+            document.getElementById('currentDistDisplay').textContent = (p.totalDist / 1000).toFixed(1) + "km";
+
+            const chartMarker = document.getElementById('elevationMarker');
+            if (chartMarker) {
+                const eleRange = maxEle - minEle;
+                const eleBottom = minEle - eleRange * 0.1;
+                const eleHeight = eleRange * 1.2;
+                const x = (p.totalDist / routeTotalDistance) * 100;
+                const y = 100 - ((p.ele - eleBottom) / eleHeight) * 100;
+                chartMarker.style.display = 'block';
+                chartMarker.setAttribute('cx', x + '%');
+                chartMarker.setAttribute('cy', y + '%');
+                document.getElementById('currentEleDisplay').textContent = Math.round(p.ele) + "m";
+            }
+        }
+
+        function checkAndShowComment() {
+            const currentP = gpxPoints[currentAnimFrame];
+            if (!currentP) return;
+            courseComments.forEach((c) => {
+                const dist = map.distance([currentP.lat, currentP.lon], [c.lat, c.lon]);
+                if (dist < 150) {
+                    L.popup({ autoClose: true, closeOnClick: false, offset: [0, -10] })
+                        .setLatLng([c.lat, c.lon]).setContent(c.text).openOn(map);
+                }
+            });
         }
 
         function addLegend() {
             const legend = L.control({position: 'topright'});
-            legend.onAdd = function (map) {
+            legend.onAdd = function () {
                 const div = L.DomUtil.create('div', 'legend');
                 div.innerHTML = `
                     <div style="font-weight:bold; margin-bottom:4px; border-bottom:1px solid #ddd;">勾配</div>
