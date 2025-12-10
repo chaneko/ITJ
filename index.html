@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPXルートビューア (ITJ)</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #f3f4f6;
+        }
+        #map {
+            z-index: 1;
+        }
+        .header-hidden {
+            display: none !important;
+        }
+        .legend {
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+            font-size: 11px;
+            line-height: 1.4;
+            color: #333;
+        }
+        .legend i {
+            width: 14px;
+            height: 14px;
+            float: left;
+            margin-right: 6px;
+            opacity: 0.8;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- ヘッダーエリア -->
+    <header id="appHeader" class="bg-white shadow-sm z-20 p-3 transition-all duration-300 flex items-center justify-between">
+        <h1 class="text-lg font-bold text-gray-800 pl-2">ルートビューア (ITJ)</h1>
+        
+        <!-- ファイル読み込みボタン -->
+        <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded shadow transition flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            GPXを選択
+            <input type="file" accept=".gpx" class="hidden" onchange="handleFileSelect(event)">
+        </label>
+    </header>
+
+    <!-- 地図表示エリア -->
+    <main class="flex-1 relative w-full h-full">
+        <div id="map" class="w-full h-full"></div>
+        
+        <!-- コントロールボタン群 (右下) -->
+        <div class="absolute bottom-6 right-6 z-[1000] flex flex-col gap-3">
+            <!-- 全画面表示ボタン -->
+            <button 
+                onclick="toggleZenMode()" 
+                id="fullscreenBtn"
+                class="bg-white text-gray-700 p-3 rounded-full shadow-md hover:bg-gray-100 transition border border-gray-200"
+                title="全画面表示"
+            >
+                <svg id="icon-maximize" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                <svg id="icon-minimize" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <!-- 範囲リセットボタン -->
+            <button 
+                onclick="fitBoundsToTrack()" 
+                class="bg-white text-gray-700 p-3 rounded-full shadow-md hover:bg-gray-100 transition border border-gray-200"
+                title="ルート全体を表示"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </button>
+        </div>
+    </main>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+
+    <script>
+        // ==========================================
+        //  設定: 読み込むGPXファイル名（同じ階層に配置してください）
+        // ==========================================
+        const GPX_FILE_URL = 'ITJ_course_2025.gpx'; 
+
+        // デフォルトのサンプルデータ (ファイルが見つからない場合に使用)
+        const sampleGpxData = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Sample" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>IZU TRAIL JOURNE</name>
+    <trkseg>
+      <trkpt lat="34.7540" lon="138.7760"><ele>5</ele></trkpt>   <!-- 松崎港 -->
+      <trkpt lat="34.7600" lon="138.7900"><ele>150</ele></trkpt>
+      <trkpt lat="34.7700" lon="138.8100"><ele>400</ele></trkpt>
+      <trkpt lat="34.7850" lon="138.8300"><ele>700</ele></trkpt> <!-- 宝蔵院周辺 -->
+      <trkpt lat="34.8000" lon="138.8500"><ele>500</ele></trkpt>
+      <trkpt lat="34.8200" lon="138.8700"><ele>900</ele></trkpt> <!-- 八瀬峠付近 -->
+      <trkpt lat="34.8400" lon="138.8900"><ele>850</ele></trkpt>
+      <trkpt lat="34.8600" lon="138.9100"><ele>1000</ele></trkpt> <!-- 仁科峠付近 -->
+      <trkpt lat="34.8800" lon="138.9200"><ele>950</ele></trkpt>
+      <trkpt lat="34.9000" lon="138.9300"><ele>800</ele></trkpt> <!-- 土肥峠付近 -->
+      <trkpt lat="34.9300" lon="138.9400"><ele>900</ele></trkpt> <!-- 達磨山付近 -->
+      <trkpt lat="34.9500" lon="138.9500"><ele>600</ele></trkpt>
+      <trkpt lat="34.9600" lon="138.9600"><ele>300</ele></trkpt>
+      <trkpt lat="34.9720" lon="138.9660"><ele>50</ele></trkpt>  <!-- 修善寺 -->
+    </trkseg>
+  </trk>
+</gpx>`;
+
+        let map;
+        let currentTrackLayer = null;
+        let isZenMode = false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            loadGpxFile(); // 外部ファイルの読み込みを試みる
+        });
+
+        function initMap() {
+            // 初期表示は仮の位置（後でfitBoundsで調整されます）
+            map = L.map('map').setView([34.86, 138.91], 11);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+            addLegend();
+        }
+
+        // 外部GPXファイルの読み込み処理
+        function loadGpxFile() {
+            fetch(GPX_FILE_URL)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("HTTP error " + response.status);
+                    }
+                    return response.text();
+                })
+                .then(text => {
+                    console.log(`Loaded ${GPX_FILE_URL}`);
+                    processGPX(text);
+                })
+                .catch(err => {
+                    console.warn(`外部ファイル(${GPX_FILE_URL})の読み込みに失敗しました。サンプルデータを表示します。`, err);
+                    // 失敗した場合はサンプルを表示
+                    processGPX(sampleGpxData);
+                });
+        }
+
+        // ファイル選択時の処理 (手動アップロード)
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const xmlContent = e.target.result;
+                processGPX(xmlContent);
+            };
+            reader.readAsText(file);
+        }
+
+        // GPXデータの解析と描画（共通処理）
+        function processGPX(xmlString) {
+            try {
+                // 既存のレイヤーがあれば削除
+                if (currentTrackLayer) {
+                    map.removeLayer(currentTrackLayer);
+                    currentTrackLayer = null;
+                }
+
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+                const trkpts = xmlDoc.getElementsByTagName("trkpt");
+
+                if (trkpts.length === 0) {
+                    alert("有効なトラックポイントが見つかりませんでした。");
+                    return;
+                }
+
+                const points = [];
+                for (let i = 0; i < trkpts.length; i++) {
+                    const lat = parseFloat(trkpts[i].getAttribute("lat"));
+                    const lon = parseFloat(trkpts[i].getAttribute("lon"));
+                    const eleTag = trkpts[i].getElementsByTagName("ele")[0];
+                    const ele = eleTag ? parseFloat(eleTag.textContent) : 0;
+                    points.push({ lat, lon, ele });
+                }
+
+                drawColoredTrack(points);
+
+            } catch (err) {
+                console.error("GPX解析エラー:", err);
+                alert("GPXファイルの読み込みに失敗しました。");
+            }
+        }
+
+        function drawColoredTrack(points) {
+            currentTrackLayer = L.featureGroup();
+            const canvasRenderer = L.canvas({ padding: 0.5 });
+
+            for (let i = 0; i < points.length - 1; i++) {
+                const p1 = points[i];
+                const p2 = points[i+1];
+                const latlng1 = L.latLng(p1.lat, p1.lon);
+                const latlng2 = L.latLng(p2.lat, p2.lon);
+                
+                const dist = map.distance(latlng1, latlng2);
+                const eleDiff = p2.ele - p1.ele;
+                
+                let color = "#66bd63"; // 平坦
+
+                if (dist > 0) {
+                    const gradient = (eleDiff / dist) * 100;
+                    if (gradient >= 5) color = "#d73027";       // 急上り
+                    else if (gradient >= 1) color = "#fc8d59";  // 上り
+                    else if (gradient > -1) color = "#66bd63";  // 平坦
+                    else if (gradient > -5) color = "#4575b4";  // 下り
+                    else color = "#313695";                     // 急下り
+                }
+
+                L.polyline([latlng1, latlng2], {
+                    color: color,
+                    weight: 5,
+                    opacity: 0.8,
+                    renderer: canvasRenderer
+                }).addTo(currentTrackLayer);
+            }
+            
+            // スタート/ゴール
+            if (points.length > 0) {
+                L.circleMarker([points[0].lat, points[0].lon], {
+                    color: 'green', fillColor: '#0f0', fillOpacity: 1, radius: 6
+                }).bindPopup("Start").addTo(currentTrackLayer);
+
+                L.circleMarker([points[points.length-1].lat, points[points.length-1].lon], {
+                    color: 'black', fillColor: '#fff', fillOpacity: 1, radius: 6
+                }).bindPopup("Goal").addTo(currentTrackLayer);
+            }
+
+            currentTrackLayer.addTo(map);
+            fitBoundsToTrack();
+        }
+
+        function fitBoundsToTrack() {
+            if (currentTrackLayer) {
+                map.fitBounds(currentTrackLayer.getBounds(), { padding: [20, 20] });
+            }
+        }
+
+        function toggleZenMode() {
+            const header = document.getElementById('appHeader');
+            const maximizeIcon = document.getElementById('icon-maximize');
+            const minimizeIcon = document.getElementById('icon-minimize');
+            isZenMode = !isZenMode;
+
+            if (isZenMode) {
+                header.classList.add('header-hidden');
+                maximizeIcon.classList.add('hidden');
+                minimizeIcon.classList.remove('hidden');
+            } else {
+                header.classList.remove('header-hidden');
+                maximizeIcon.classList.remove('hidden');
+                minimizeIcon.classList.add('hidden');
+            }
+            setTimeout(() => map.invalidateSize(), 300);
+        }
+
+        function addLegend() {
+            const legend = L.control({position: 'topright'});
+            legend.onAdd = function (map) {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = `
+                    <div style="font-weight:bold; margin-bottom:4px; border-bottom:1px solid #ddd;">勾配</div>
+                    <div><i style="background: #d73027"></i> 急な上り</div>
+                    <div><i style="background: #fc8d59"></i> 上り</div>
+                    <div><i style="background: #66bd63"></i> 平坦</div>
+                    <div><i style="background: #4575b4"></i> 下り</div>
+                    <div><i style="background: #313695"></i> 急な下り</div>
+                `;
+                return div;
+            };
+            legend.addTo(map);
+        }
+    </script>
+</body>
+</html>
