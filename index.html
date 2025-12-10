@@ -221,9 +221,10 @@
         // ==========================================
         const courseComments = [
             { lat: 34.7622, lon: 138.7757, text: "<b>\u{1F3C1} スタート：松崎港</b><br>Aブロックの先頭集団のスタートは迫力あるよー。" },
+            { lat: 34.78945, lon: 138.83531, text: "<b>\u{1F3C1} 宝蔵院</b><br>ここまで全部のぼりー" },
             { lat: 34.7841, lon: 138.8448, text: "<b>\u{1F332} 八瀬峠</b><br>走れる林道。シングルトラック抜けた後だけど足温存で。" },
             { lat: 34.8098, lon: 138.8808, text: "<b>\u26F0 諸坪峠</b><br>ここもがっつり走れちゃう。まだ我慢。" },
-            { lat: 34.82977, lon: 138.90792, text: "<b>\u26F0 こがね橋エイド</b><br>桜葉もちは一人ひとつね" },
+            { lat: 34.81527, lon: 138.89888, text: "<b>\u26F0 こがね橋エイド</b><br>桜葉もちは一人ひとつね<br>ここから二本杉までがっつり登るよー" },
             { lat: 34.82977, lon: 138.90792, text: "<b>\u26F0 二本杉峠</b>" },
             { lat: 34.86169, lon: 138.84546, text: "<b>\u{1F5FB} 仁科展望台</b><br>かーちゃんまめちゃん応援" },
             { lat: 34.87064, lon: 138.84383, text: "<b>\u{1F5FB} 仁科エイド</b><br>塩カツオうどんは食べてって！！" },
@@ -236,7 +237,7 @@
             { lat: 34.97501, lon: 138.85045, text: "この辺はガレガレ。捻挫注意ね" },
             { lat: 34.97062, lon: 138.85155, text: "地味に登ってる気がするけど気のせいだからね。" },
             { lat: 34.96885, lon: 138.90517, text: "ここからロード！！みんないがいとちゃんと走るよ" },
-            { lat: 34.9720, lon: 138.9660, text: "<b>\u2668 ゴール：修善寺</b><br>けんちゃんお疲れ様ー" }
+            { lat: 34.97038, lon: 138.92860, text: "<b>\u2668 ゴール：修善寺</b><br>けんちゃんお疲れ様ー" }
         ];
 
         // ==========================================
@@ -512,15 +513,45 @@
 
                 if (REVERSE_GPX_ORDER) rawPoints.reverse();
 
+                // === 補間処理 (リサンプリング) ===
+                // ポイント間隔がバラバラだと速度が変わってしまうため、
+                // 約10mごとにポイントを再生成して等速にする
+                const interpolatedPoints = [];
+                const INTERVAL = 10; // 10メートル刻み
+
+                if (rawPoints.length > 0) {
+                    interpolatedPoints.push(rawPoints[0]);
+                    
+                    for (let i = 0; i < rawPoints.length - 1; i++) {
+                        const p1 = rawPoints[i];
+                        const p2 = rawPoints[i+1];
+                        const dist = map.distance([p1.lat, p1.lon], [p2.lat, p2.lon]);
+                        
+                        // 距離がINTERVALより大きい場合、間に点を埋める
+                        if (dist > INTERVAL) {
+                            const steps = Math.floor(dist / INTERVAL);
+                            for (let j = 1; j <= steps; j++) {
+                                const ratio = j / (steps + 1);
+                                const lat = p1.lat + (p2.lat - p1.lat) * ratio;
+                                const lon = p1.lon + (p2.lon - p1.lon) * ratio;
+                                const ele = p1.ele + (p2.ele - p1.ele) * ratio;
+                                interpolatedPoints.push({ lat, lon, ele });
+                            }
+                        }
+                        interpolatedPoints.push(p2);
+                    }
+                }
+
+                // 3. 距離計算とポイント生成 (補間後のデータを使用)
                 const points = [];
                 let totalDist = 0;
                 minEle = Infinity;
                 maxEle = -Infinity;
 
-                for (let i = 0; i < rawPoints.length; i++) {
-                    const p = rawPoints[i];
+                for (let i = 0; i < interpolatedPoints.length; i++) {
+                    const p = interpolatedPoints[i];
                     if (i > 0) {
-                        const prev = rawPoints[i-1];
+                        const prev = interpolatedPoints[i-1];
                         const dist = map.distance([prev.lat, prev.lon], [p.lat, p.lon]);
                         totalDist += dist;
                     }
