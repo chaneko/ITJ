@@ -110,6 +110,15 @@
             box-shadow: 0 1px 2px rgba(0,0,0,0.3);
             margin-top: -5px;
         }
+        
+        /* カスタムアイコン画像用スタイル */
+        .custom-runner-icon {
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            background: white;
+            object-fit: cover;
+        }
     </style>
 </head>
 <body class="h-screen w-full flex flex-col overflow-hidden">
@@ -119,7 +128,6 @@
     
     <!-- 高低図エリア（左上・反透過） -->
     <div id="elevationChartContainer">
-        <!-- viewBoxを設定して座標系を0-100に固定 -->
         <svg id="elevationSvg" viewBox="0 0 100 100" preserveAspectRatio="none" class="overflow-visible w-full h-full">
             <defs>
                 <linearGradient id="elevationGradient" x1="0" x2="0" y1="0" y2="1">
@@ -166,8 +174,16 @@
         </button>
     </div>
     
-    <!-- 右下ボタン群（GPX読込・全体表示） -->
+    <!-- 右下ボタン群（GPX読込・全体表示・アイコン読込） -->
     <div class="absolute bottom-24 right-4 z-[900] flex flex-col gap-3">
+        <!-- アイコン読込ボタン -->
+        <label class="cursor-pointer bg-white text-gray-700 p-2.5 rounded-full shadow-lg hover:bg-gray-100 transition border border-gray-200 flex items-center justify-center" title="ランナー画像を変更">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <input type="file" accept="image/*" class="hidden" onchange="handleIconSelect(event)">
+        </label>
+
         <!-- GPX読込ボタン -->
         <label class="cursor-pointer bg-white text-gray-700 p-2.5 rounded-full shadow-lg hover:bg-gray-100 transition border border-gray-200 flex items-center justify-center" title="GPXファイルを読み込む">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -204,13 +220,23 @@
         //  コメントデータ (Unicodeエスケープ済み)
         // ==========================================
         const courseComments = [
-            { lat: 34.7622, lon: 138.7757, text: "<b>\u{1F3C1} スタート：松崎港</b><br>Aブロックの先頭集団のスタートは迫力あり。" },
-            { lat: 34.7841, lon: 138.8448, text: "<b>\u{1F332} 八瀬峠</b><br>走れる林道。足温存で。" },
+            { lat: 34.7622, lon: 138.7757, text: "<b>\u{1F3C1} スタート：松崎港</b><br>Aブロックの先頭集団のスタートは迫力あるよー。" },
+            { lat: 34.7841, lon: 138.8448, text: "<b>\u{1F332} 八瀬峠</b><br>走れる林道。シングルトラック抜けた後だけど足温存で。" },
             { lat: 34.8098, lon: 138.8808, text: "<b>\u26F0 諸坪峠</b><br>ここもがっつり走れちゃう。まだ我慢。" },
-            { lat: 34.8600, lon: 138.9100, text: "<b>\u{1F5FB} 仁科峠</b><br>晴れていれば富士山ドーン" },
-            { lat: 34.9300, lon: 138.9400, text: "<b>\u{1F3D4} 達磨山</b><br>ITJのハイライト。<br>360度の大パノラマを楽しんで！" },
-            { lat: 34.9380, lon: 138.9430, text: "<b>\u{1F6B6} 小達磨山</b><br>これがラスボス。後は降るだけ。" },
-            { lat: 34.9720, lon: 138.9660, text: "<b>\u2668 ゴール：修善寺</b><br>最後ロードに出たらみんな走る" }
+            { lat: 34.82977, lon: 138.90792, text: "<b>\u26F0 こがね橋エイド</b><br>桜葉もちは一人ひとつね" },
+            { lat: 34.82977, lon: 138.90792, text: "<b>\u26F0 二本杉峠</b>" },
+            { lat: 34.86169, lon: 138.84546, text: "<b>\u{1F5FB} 仁科展望台</b><br>かーちゃんまめちゃん応援" },
+            { lat: 34.87064, lon: 138.84383, text: "<b>\u{1F5FB} 仁科エイド</b><br>塩カツオうどんは食べてって！！" },
+            { lat: 34.93452, lon: 138.83172, text: "<b>\u{1F5FB} 土肥駐車場エイド</b><br>しし汁という名の豚汁！" },
+            { lat: 34.93624, lon: 138.83371, text: "ここで振り向いたら駿河湾が綺麗に見えるよ" },
+            { lat: 34.95498, lon: 138.83926, text: "<b>\u{1F3D4} 達磨山</b><br>晴れてたら素敵な景色！！晴れてたら！！" },
+            { lat: 34.96425, lon: 138.83842, text: "<b>\u{1F6B6} 小達磨山</b><br>これがラスボス。後は降るだけ。" },
+            { lat: 34.97410, lon: 138.83662, text: "芝生ふかふかご褒美ぞーんだよ" },
+            { lat: 34.97532, lon: 138.85052, text: "トイレあるよ。ブリーフィングでは閉鎖されてるって言ってたけど。" },
+            { lat: 34.97501, lon: 138.85045, text: "この辺はガレガレ。捻挫注意ね" },
+            { lat: 34.97062, lon: 138.85155, text: "地味に登ってる気がするけど気のせいだからね。" },
+            { lat: 34.96885, lon: 138.90517, text: "ここからロード！！みんないがいとちゃんと走るよ" },
+            { lat: 34.9720, lon: 138.9660, text: "<b>\u2668 ゴール：修善寺</b><br>けんちゃんお疲れ様ー" }
         ];
 
         // ==========================================
@@ -222,31 +248,32 @@
             '  <trk>',
             '    <name>ITJ Sample</name>',
             '    <trkseg>',
+            // 松崎港から修善寺までの簡易ルート
             '      <trkpt lat="34.7540" lon="138.7760"><ele>5</ele></trkpt>',
             '      <trkpt lat="34.7600" lon="138.7850"><ele>50</ele></trkpt>',
             '      <trkpt lat="34.7650" lon="138.7950"><ele>100</ele></trkpt>',
             '      <trkpt lat="34.7700" lon="138.8100"><ele>400</ele></trkpt>',
             '      <trkpt lat="34.7750" lon="138.8200"><ele>550</ele></trkpt>',
-            '      <trkpt lat="34.7850" lon="138.8300"><ele>700</ele></trkpt>',
+            '      <trkpt lat="34.7850" lon="138.8300"><ele>700</ele></trkpt>', // 宝蔵院
             '      <trkpt lat="34.7900" lon="138.8400"><ele>600</ele></trkpt>',
             '      <trkpt lat="34.8000" lon="138.8500"><ele>500</ele></trkpt>',
             '      <trkpt lat="34.8100" lon="138.8600"><ele>700</ele></trkpt>',
-            '      <trkpt lat="34.8200" lon="138.8700"><ele>900</ele></trkpt>',
+            '      <trkpt lat="34.8200" lon="138.8700"><ele>900</ele></trkpt>', // 八瀬峠
             '      <trkpt lat="34.8300" lon="138.8800"><ele>880</ele></trkpt>',
             '      <trkpt lat="34.8400" lon="138.8900"><ele>850</ele></trkpt>',
             '      <trkpt lat="34.8500" lon="138.9000"><ele>920</ele></trkpt>',
-            '      <trkpt lat="34.8600" lon="138.9100"><ele>1000</ele></trkpt>',
+            '      <trkpt lat="34.8600" lon="138.9100"><ele>1000</ele></trkpt>', // 仁科峠
             '      <trkpt lat="34.8700" lon="138.9150"><ele>980</ele></trkpt>',
             '      <trkpt lat="34.8800" lon="138.9200"><ele>950</ele></trkpt>',
             '      <trkpt lat="34.8900" lon="138.9250"><ele>880</ele></trkpt>',
-            '      <trkpt lat="34.9000" lon="138.9300"><ele>800</ele></trkpt>',
+            '      <trkpt lat="34.9000" lon="138.9300"><ele>800</ele></trkpt>', // 土肥峠
             '      <trkpt lat="34.9100" lon="138.9350"><ele>850</ele></trkpt>',
             '      <trkpt lat="34.9200" lon="138.9380"><ele>950</ele></trkpt>',
-            '      <trkpt lat="34.9300" lon="138.9400"><ele>980</ele></trkpt>',
-            '      <trkpt lat="34.9380" lon="138.9430"><ele>900</ele></trkpt>',
+            '      <trkpt lat="34.9300" lon="138.9400"><ele>980</ele></trkpt>', // 達磨山
+            '      <trkpt lat="34.9380" lon="138.9430"><ele>900</ele></trkpt>', // 小達磨山
             '      <trkpt lat="34.9500" lon="138.9500"><ele>600</ele></trkpt>',
             '      <trkpt lat="34.9600" lon="138.9600"><ele>300</ele></trkpt>',
-            '      <trkpt lat="34.9720" lon="138.9660"><ele>50</ele></trkpt>',
+            '      <trkpt lat="34.9720" lon="138.9660"><ele>50</ele></trkpt>',  // 修善寺
             '    </trkseg>',
             '  </trk>',
             '</gpx>'
@@ -261,6 +288,14 @@
         let gpxPoints = []; 
         let routeTotalDistance = 0;
         let minEle = 0, maxEle = 0; 
+        
+        // カスタムアイコン用変数 (初期値に「けんちゃん.png」を設定)
+        let userIcon = L.icon({
+            iconUrl: 'けんちゃん.png',
+            iconSize: [40, 40],
+            iconAnchor: [20, 20],
+            className: 'custom-runner-icon'
+        });
 
         let isPlaying = false;
         let currentAnimFrame = 0; 
@@ -269,6 +304,7 @@
 
         // --- グローバル関数定義 ---
 
+        // GPXファイル選択時の処理
         window.handleFileSelect = function(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -278,6 +314,45 @@
                 processGPX(xmlContent);
             };
             reader.readAsText(file);
+        };
+
+        // アイコン画像選択時の処理
+        window.handleIconSelect = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imgUrl = e.target.result;
+                
+                // アイコンを生成
+                userIcon = L.icon({
+                    iconUrl: imgUrl,
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 20],
+                    className: 'custom-runner-icon'
+                });
+                
+                // 既存のマーカーがあれば更新
+                if (movingMarker && gpxPoints.length > 0) {
+                    map.removeLayer(movingMarker);
+                    movingMarker = L.marker([gpxPoints[currentAnimFrame].lat, gpxPoints[currentAnimFrame].lon], {
+                        icon: userIcon,
+                        zIndexOffset: 1000
+                    }).addTo(map);
+                } else if (!movingMarker && gpxPoints.length > 0) {
+                    setupMovingMarker();
+                }
+                
+                alert("ランナー画像を変更しました！");
+            };
+            reader.readAsDataURL(file);
+        };
+
+        window.toggleZenMode = function() {
+            const header = document.getElementById('appHeader');
+            isZenMode = !isZenMode;
+            header.style.display = isZenMode ? 'none' : 'flex';
+            setTimeout(() => map.invalidateSize(), 300);
         };
 
         window.fitBoundsToTrack = function() {
@@ -319,7 +394,7 @@
             document.getElementById('icon-pause').classList.add('hidden');
             
             map.closePopup();
-            if(gpxPoints.length > 0) {
+            if(gpxPoints.length > 0 && movingMarker) {
                 movingMarker.setLatLng([gpxPoints[0].lat, gpxPoints[0].lon]);
                 map.panTo([gpxPoints[0].lat, gpxPoints[0].lon]);
             }
@@ -377,7 +452,12 @@
                     if (nearestPoint && minDistance <= 300) {
                         const distStartKm = (nearestPoint.totalDist / 1000).toFixed(1);
                         
-                        let popupContent = `<span class="text-blue-600 font-bold text-base">${distStartKm} km</span>`;
+                        let popupContent = `<div class="text-center">
+                            <span class="text-blue-600 font-bold text-base">${distStartKm} km</span>
+                            <div class="text-xs text-gray-500 mt-1">
+                                Lat: ${nearestPoint.lat.toFixed(5)}<br>Lon: ${nearestPoint.lon.toFixed(5)}
+                            </div>
+                        </div>`;
                         
                         L.popup()
                             .setLatLng([nearestPoint.lat, nearestPoint.lon]) // マーカー位置も厳密なコース上に寄せる
@@ -516,9 +596,18 @@
         function setupMovingMarker() {
             if (movingMarker) map.removeLayer(movingMarker);
             if (gpxPoints.length > 0) {
-                movingMarker = L.circleMarker([gpxPoints[0].lat, gpxPoints[0].lon], {
-                    color: 'white', fillColor: 'blue', fillOpacity: 1, radius: 8, weight: 2
-                }).addTo(map);
+                // ユーザーアイコンがあればそれを使う
+                if (userIcon) {
+                    movingMarker = L.marker([gpxPoints[0].lat, gpxPoints[0].lon], {
+                        icon: userIcon,
+                        zIndexOffset: 1000
+                    }).addTo(map);
+                } else {
+                    // なければデフォルトの円マーカー
+                    movingMarker = L.circleMarker([gpxPoints[0].lat, gpxPoints[0].lon], {
+                        color: 'white', fillColor: 'blue', fillOpacity: 1, radius: 8, weight: 2
+                    }).addTo(map);
+                }
             }
         }
 
