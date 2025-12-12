@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPXルートビューア (ITJ) v3 - Race Mode</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #f3f4f6;
+        }
+        #map {
+            z-index: 1;
+            background-color: #222;
+        }
+        
+        /* --- 高低図エリア（左上・反透過） --- */
+        #elevationChartContainer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 300px;
+            max-width: 40%; /* スマホ対応 */
+            height: 80px;
+            background: rgba(255, 255, 255, 0.6); /* 反透過 */
+            border-radius: 8px;
+            z-index: 1000;
+            padding: 5px 5px 15px 5px; /* 下に少し余白 */
+            backdrop-filter: blur(2px);
+            pointer-events: none; /* 地図操作の邪魔にならないように */
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        /* --- コントロールパネル（下部・コンパクト） --- */
+        /* AI実況バーのために少し上に配置 */
+        .player-controls {
+            position: absolute;
+            bottom: 50px; /* 24px -> 50px */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            width: auto; 
+            min-width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 6px 16px;
+            border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            transition: bottom 0.3s;
+        }
+
+        /* 凡例 */
+        .legend {
+            background: white;
+            padding: 6px;
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+            font-size: 10px;
+            line-height: 1.4;
+            color: #333;
+        }
+        .legend i {
+            width: 12px;
+            height: 12px;
+            float: left;
+            margin-right: 4px;
+            opacity: 0.8;
+            border-radius: 2px;
+        }
+        .comment-popup .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        }
+        .comment-popup .leaflet-popup-content {
+            margin: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        /* スライダーのカスタマイズ */
+        input[type=range] {
+            height: 4px;
+            border-radius: 2px;
+            background: #cbd5e1;
+            outline: none;
+            -webkit-appearance: none;
+            flex-grow: 1; /* 横幅いっぱいに */
+            cursor: pointer;
+            width: 120px; /* 幅を固定してコンパクトに */
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            margin-top: -5px;
+        }
+        
+        /* カスタムアイコン画像用スタイル */
+        .custom-runner-icon {
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            background: white;
+            object-fit: cover;
+        }
+        
+        /* 応援吹き出し */
+        .cheer-popup .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #ef4444;
+            border-radius: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .cheer-popup .leaflet-popup-tip {
+            background: #ef4444;
+        }
+
+        /* 順位表示・タイム表示などのオーバーレイ */
+        #raceStatus {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 1000;
+            backdrop-filter: blur(2px);
+            display: none; /* GPXロード後に表示 */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-width: 160px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* AI実況バー（ニュースティッカー風） */
+        #aiCommentaryBox {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: rgba(20, 20, 30, 0.9);
+            color: #fbbf24; /* Amber-400 */
+            z-index: 2000;
+            display: flex; /* デフォルトで表示 */
+            align-items: center;
+            overflow: hidden;
+            white-space: nowrap;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .ai-label {
+            background: #7c3aed; /* Violet-600 */
+            color: white;
+            padding: 0 12px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+            font-size: 12px;
+            z-index: 10;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+            flex-shrink: 0;
+        }
+
+        #aiCommentaryText {
+            padding-left: 100%;
+            display: inline-block;
+            animation: marquee 25s linear infinite;
+            color: #f3f4f6;
+            font-weight: 500;
+        }
+
+        @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
+
+        /* モーダル共通 */
+        .modal-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 3000; /* AI実況バーより上に */
+            display: none;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 320px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        /* リザルト画面専用スタイル */
+        #resultModal .modal-content {
+            max-width: 480px;
+            background: linear-gradient(to bottom right, #ffffff, #f0f9ff);
+        }
+        .podium-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 8px;
+            margin: 20px 0;
+            height: 160px;
+        }
+        .podium-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+        .podium-rank {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 4px;
+            text-shadow: 1px 1px 0 #fff;
+        }
+        .podium-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            z-index: 10;
+            background: white;
+            object-fit: cover;
+            margin-bottom: -15px; /* 台座にめり込ませる */
+        }
+        .podium-base {
+            width: 70px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding-bottom: 8px;
+            color: white;
+            font-weight: bold;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        /* 1位 */
+        .rank-1 .podium-icon { width: 80px; height: 80px; border-color: #fbbf24; }
+        .rank-1 .podium-base { height: 100px; background: linear-gradient(to bottom, #fbbf24, #d97706); }
+        .rank-1 .podium-rank { color: #d97706; font-size: 1.5em; }
+        /* 2位 */
+        .rank-2 .podium-base { height: 70px; background: linear-gradient(to bottom, #9ca3af, #4b5563); }
+        .rank-2 .podium-rank { color: #4b5563; }
+        /* 3位 */
+        .rank-3 .podium-base { height: 50px; background: linear-gradient(to bottom, #fdba74, #c2410c); }
+        .rank-3 .podium-rank { color: #c2410c; }
+
+        .result-list {
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+            border-top: 1px solid #eee;
+        }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+    </style>
+</head>
+<body class="h-screen w-full flex flex-col overflow-hidden">
+
+    <!-- 地図表示エリア -->
+    <div id="map" class="w-full h-full absolute inset-0"></div>
+    
+    <!-- 順位・タイム表示 -->
+    <div id="raceStatus">
+        <div id="raceTimer" class="text-xl font-bold text-center mb-2 font-mono text-gray-800 bg-gray-100 rounded py-1">00:00:00</div>
+        <div class="font-bold border-b border-gray-300 mb-1 pb-1 text-gray-600">Leaderboard</div>
+        <div id="leaderboardContent"></div>
+    </div>
+
+    <!-- AI実況バー (下部固定) -->
+    <div id="aiCommentaryBox">
+        <div class="ai-label">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
+                <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z" />
+            </svg>
+            AI実況 LIVE
+        </div>
+        <div id="aiCommentaryText">
+            レース開始準備中... AI実況がここに流れます...
+        </div>
+    </div>
+    
+    <!-- 高低図エリア（左上・反透過） -->
+    <div id="elevationChartContainer">
+        <svg id="elevationSvg" viewBox="0 0 100 100" preserveAspectRatio="none" class="overflow-visible w-full h-full">
+            <defs>
+                <linearGradient id="elevationGradient" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.8"/>
+                    <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.2"/>
+                </linearGradient>
+            </defs>
+            <path id="elevationPath" d="" fill="url(#elevationGradient)" stroke="#2563eb" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+            <!-- 自分の位置マーカー -->
+            <circle id="elevationMarker" r="4" fill="#fbbf24" stroke="#fff" stroke-width="1.5" cx="0" cy="0" style="display:none;" vector-effect="non-scaling-stroke"></circle>
+        </svg>
+        <div id="currentEleDisplay" class="absolute top-1 right-1 text-[10px] font-bold text-blue-800 bg-white/70 px-1 rounded"></div>
+    </div>
+
+    <!-- 再生コントロールパネル（下部・コンパクト） -->
+    <div class="player-controls">
+        <!-- 再生ボタン -->
+        <button onclick="togglePlay()" id="playBtn" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full shadow transition flex-shrink-0">
+            <svg id="icon-play" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <svg id="icon-pause" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        </button>
+
+        <!-- スライダー -->
+        <input type="range" id="progressSlider" min="0" max="100" value="0" oninput="seekAnimation(this.value)">
+        
+        <!-- 距離情報 (自分の距離を表示) -->
+        <div class="flex flex-col items-end text-[10px] leading-tight text-gray-600 w-16 flex-shrink-0">
+            <span id="currentDistDisplay" class="font-bold text-blue-600">0.0km</span>
+            <span id="totalDistDisplay" class="text-gray-400">/ 0.0km</span>
+        </div>
+
+        <!-- 速度ボタン -->
+        <button onclick="changeSpeed()" id="speedBtn" class="text-[10px] font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded hover:bg-gray-200 w-8 text-center flex-shrink-0 transition">x1</button>
+
+        <!-- リセットボタン -->
+        <button onclick="resetAnimation()" class="text-gray-400 hover:text-gray-600 flex-shrink-0" title="リセット">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+        </button>
+    </div>
+    
+    <!-- 右下ボタン群（下揃え・横並び） -->
+    <div class="absolute bottom-12 right-4 z-[900] flex flex-row gap-3">
+        <!-- AI実況ON/OFFボタン -->
+        <button onclick="toggleAiCommentary()" id="btnAiToggle" class="bg-purple-600 text-white p-2.5 rounded-full shadow-lg hover:bg-purple-700 transition border border-purple-800 flex items-center justify-center font-bold text-xs" title="AI実況 ON/OFF">
+            AI ON
+        </button>
+
+        <!-- 応援ボタン -->
+        <button onclick="openCheerModal()" class="bg-white text-yellow-600 p-2.5 rounded-full shadow-lg hover:bg-gray-100 transition border border-gray-200 flex items-center justify-center" title="応援してペースアップ！">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+            </svg>
+        </button>
+
+        <!-- GPX読込ボタン -->
+        <label class="cursor-pointer bg-white text-gray-700 p-2.5 rounded-full shadow-lg hover:bg-gray-100 transition border border-gray-200 flex items-center justify-center" title="GPXファイルを読み込む">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <input type="file" accept=".gpx" class="hidden" onchange="handleFileSelect(event)">
+        </label>
+
+        <!-- 全体表示ボタン -->
+        <button onclick="fitBoundsToTrack()" class="bg-white text-gray-700 p-2.5 rounded-full shadow-lg hover:bg-gray-100 transition border border-gray-200" title="ルート全体を表示">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- 応援モーダル -->
+    <div id="cheerModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-lg font-bold mb-4 text-gray-800">📣 誰を応援する？</h3>
+            <div id="cheerRunnerList" class="flex flex-col gap-3">
+                <!-- JSで生成 -->
+            </div>
+            <button onclick="closeCheerModal()" class="mt-4 text-sm text-gray-500 hover:text-gray-800 underline">閉じる</button>
+        </div>
+    </div>
+
+    <!-- リザルトモーダル -->
+    <div id="resultModal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 class="text-2xl font-bold mb-2 text-gray-800">🏆 Race Results 🏆</h2>
+            <div class="text-sm text-gray-500 mb-4">全員ゴールしました！お疲れ様でした！</div>
+            
+            <!-- 表彰台エリア -->
+            <div id="podiumArea" class="podium-container">
+                <!-- JSで生成 -->
+            </div>
+
+            <!-- 全員の結果リスト -->
+            <div id="resultListArea" class="result-list">
+                <!-- JSで生成 -->
+            </div>
+
+            <div class="mt-5 flex justify-center gap-4">
+                <button onclick="closeResultModal()" class="bg-gray-200 text-gray-700 py-2 px-4 rounded hover:bg-gray-300 transition">閉じる</button>
+                <button onclick="resetAnimation(); closeResultModal();" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition">もう一度走る</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+
+    <script>
+        // ==========================================
+        //  設定
+        // ==========================================
+        const GPX_FILE_URL = 'ITJ_course_2025.gpx'; 
+        const REVERSE_GPX_ORDER = true; 
+        const apiKey = ""; // Gemini API Key
+
+        // アニメーション設定
+        let PLAY_SPEED = 1; 
+        const SPEED_OPTIONS = [1, 3, 5, 10]; 
+        const FRAME_DURATION = 3; // 1フレームあたりのシミュレーション時間(秒)
+
+        // ランナー設定 (ファイル名とフォールバック情報を定義)
+        const RUNNER_CONFIGS = [
+            { name: "けんちゃん", color: "#3b82f6", fileName: "けんちゃん.png", fallbackText: "Ken" },
+            { name: "りょうこさん", color: "#ec4899", fileName: "りょうこさん.png", fallbackText: "Ryo" },
+            { name: "バタコさん", color: "#f97316", fileName: "バタコさん.png", fallbackText: "Bat" },
+            { name: "ぶーちん", color: "#22c55e", fileName: "ぶーちん.png", fallbackText: "Boo" },
+            { name: "やっち", color: "#a855f7", fileName: "やっち.png", fallbackText: "Yat" },
+            { name: "じゅん", color: "#06b6d4", fileName: "じゅん.png", fallbackText: "Jun" },
+            { name: "ちゃね", color: "#eab308", fileName: "ちゃね.png", fallbackText: "Cha" }
+        ];
+        let runners = []; 
+        let aidStationIndices = []; 
+        let elapsedTime = 0; 
+        
+        // AI実況関連
+        let isAiCommentaryOn = true; // デフォルトON
+        let aiInterval = null;
+        let raceEvents = []; // AI実況に送るイベントログ
+        let lastRankMap = {}; // ID: Rank
+
+        // 区間ごとの速度制御用配列
+        let segmentRates = [];
+
+        // ==========================================
+        //  コメントデータ
+        // ==========================================
+        const courseComments = [
+            { lat: 34.7622, lon: 138.7757, text: "<b>🚩 スタート：松崎港</b><br>Aブロックの先頭集団のスタートは迫力あるよー。" },
+            { lat: 34.78945, lon: 138.83531, text: "<b>⛰️ 宝蔵院</b><br>ここまで全部のぼりー" },
+            { lat: 34.7841, lon: 138.8448, text: "<b>🌲 八瀬峠</b><br>走れる林道。シングルトラック抜けた後だけど足温存で。" },
+            { lat: 34.8098, lon: 138.8808, text: "<b>🏔️ 諸坪峠</b><br>ここからがっつり下りで走れちゃう。去年は清宮さんここで転んでDNFしてます。" },
+            { lat: 34.81527, lon: 138.89888, text: "<b>🍡 こがね橋エイド</b><br>桜葉もちは一人ひとつね<br>ここから二本杉までがっつり登るよー" },
+            { lat: 34.82977, lon: 138.90792, text: "<b>🏔️ 二本杉峠</b>" },
+            { lat: 34.86169, lon: 138.84546, text: "<b>🔭 仁科展望台</b>" },
+            { lat: 34.87064, lon: 138.84383, text: "<b>🍝 仁科エイド</b><br>塩カツオうどんは食べてって！！" },
+            { lat: 34.93452, lon: 138.83172, text: "<b>🍲 土肥駐車場エイド</b><br>しし汁という名の豚汁！" },
+            { lat: 34.93624, lon: 138.83371, text: "ここで振り向いたら駿河湾が綺麗に見えるよ" },
+            { lat: 34.95498, lon: 138.83926, text: "<b>🏔️ 達磨山</b><br>晴れてたら素敵な景色！！晴れてたら！！" },
+            { lat: 34.96425, lon: 138.83842, text: "<b>🏔️ 小達磨山</b><br>これがラスボス。後は降るだけ。" },
+            { lat: 34.97410, lon: 138.83662, text: "芝生ふかふかご褒美ぞーんだよ" },
+            { lat: 34.97532, lon: 138.85052, text: "トイレあるよ。ブリーフィングでは閉鎖されてるって言ってたけど。" },
+            { lat: 34.97501, lon: 138.85045, text: "この辺はガレガレ。捻挫注意ね" },
+            { lat: 34.97087, lon: 138.86076, text: "地味に登ってる気がするけど気のせいだからね。" },
+            { lat: 34.96631, lon: 138.89426, text: "<b>⚠️ 注意</b><br>このあたりだったと思うんだけど、いきなり凹んでるとこあるから気を付けて！！" },
+            { lat: 34.96885, lon: 138.90517, text: "ここからロード！！みんな意外とちゃんと走るよ" },
+            { lat: 34.97038, lon: 138.92860, text: "<b>♨️ ゴール：修善寺</b>" }
+        ];
+
+        const CHECKPOINT_TARGETS = [
+            { keyword: "宝蔵院", targetTime: 4500 },
+            { keyword: "こがね橋", targetTime: 11400 },
+            { keyword: "仁科エイド", targetTime: 21300 },
+            { keyword: "土肥駐車場", targetTime: 29700 },
+            { keyword: "ゴール", targetTime: 39300 }
+        ];
+
+        // 実況対象とするポイントのキーワードリスト
+        // データ上の表記に合わせて設定 ("だるま山" -> "達磨山" など)
+        const COMMENTARY_TARGET_KEYWORDS = [
+            "宝蔵院",
+            "八瀬峠",
+            "諸坪峠",
+            "こがね橋",
+            "二本杉",
+            "仁科エイド",
+            "土肥",
+            "達磨山", // ユーザー指定: だるま山
+            "ゴール"
+        ];
+
+        // ==========================================
+        //  サンプルGPXデータ
+        // ==========================================
+        const sampleGpxLines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<gpx version="1.1" creator="Sample" xmlns="http://www.topografix.com/GPX/1/1">',
+            '  <trk>',
+            '    <name>ITJ Sample</name>',
+            '    <trkseg>',
+            // 松崎港から修善寺までの簡易ルート
+            '      <trkpt lat="34.7540" lon="138.7760"><ele>5</ele></trkpt>',
+            '      <trkpt lat="34.7600" lon="138.7850"><ele>50</ele></trkpt>',
+            '      <trkpt lat="34.7650" lon="138.7950"><ele>100</ele></trkpt>',
+            '      <trkpt lat="34.7700" lon="138.8100"><ele>400</ele></trkpt>',
+            '      <trkpt lat="34.7750" lon="138.8200"><ele>550</ele></trkpt>',
+            '      <trkpt lat="34.7850" lon="138.8300"><ele>700</ele></trkpt>', // 宝蔵院
+            '      <trkpt lat="34.7900" lon="138.8400"><ele>600</ele></trkpt>',
+            '      <trkpt lat="34.8000" lon="138.8500"><ele>500</ele></trkpt>',
+            '      <trkpt lat="34.8100" lon="138.8600"><ele>700</ele></trkpt>',
+            '      <trkpt lat="34.8200" lon="138.8700"><ele>900</ele></trkpt>', // 八瀬峠
+            '      <trkpt lat="34.8300" lon="138.8800"><ele>880</ele></trkpt>',
+            '      <trkpt lat="34.8400" lon="138.8900"><ele>850</ele></trkpt>',
+            '      <trkpt lat="34.8500" lon="138.9000"><ele>920</ele></trkpt>',
+            '      <trkpt lat="34.8600" lon="138.9100"><ele>1000</ele></trkpt>', // 仁科峠
+            '      <trkpt lat="34.8700" lon="138.9150"><ele>980</ele></trkpt>',
+            '      <trkpt lat="34.8800" lon="138.9200"><ele>950</ele></trkpt>',
+            '      <trkpt lat="34.8900" lon="138.9250"><ele>880</ele></trkpt>',
+            '      <trkpt lat="34.9000" lon="138.9300"><ele>800</ele></trkpt>', // 土肥峠
+            '      <trkpt lat="34.9100" lon="138.9350"><ele>850</ele></trkpt>',
+            '      <trkpt lat="34.9200" lon="138.9380"><ele>950</ele></trkpt>',
+            '      <trkpt lat="34.9300" lon="138.9400"><ele>980</ele></trkpt>', // 達磨山
+            '      <trkpt lat="34.9380" lon="138.9430"><ele>900</ele></trkpt>', // 小達磨山
+            '      <trkpt lat="34.9500" lon="138.9500"><ele>600</ele></trkpt>',
+            '      <trkpt lat="34.9600" lon="138.9600"><ele>300</ele></trkpt>',
+            '      <trkpt lat="34.9720" lon="138.9660"><ele>50</ele></trkpt>',  // 修善寺
+            '    </trkseg>',
+            '  </trk>',
+            '</gpx>'
+        ];
+        const sampleGpxData = sampleGpxLines.join("\n");
+
+        let map;
+        let currentTrackLayer = null;
+        let commentLayer = null;
+        let isZenMode = false;
+        let gpxPoints = []; 
+        let routeTotalDistance = 0;
+        let minEle = 0, maxEle = 0; 
+        
+        let isPlaying = false;
+        let animReqId = null;
+
+        // --- グローバル関数定義 ---
+
+        window.handleFileSelect = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                processGPX(e.target.result);
+            };
+            reader.readAsText(file);
+        };
+
+        // 画像の存在をチェックしてURLを返す関数
+        function getIconUrl(config) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(config.fileName); // 読み込み成功ならそのファイル名
+                img.onerror = () => {
+                    // 読み込み失敗ならプレースホルダー
+                    const fallbackUrl = `https://placehold.co/40x40/${config.color.substring(1)}/ffffff?text=${config.fallbackText}`;
+                    resolve(fallbackUrl);
+                };
+                img.src = config.fileName;
+            });
+        }
+
+        // 応援モーダル制御
+        window.openCheerModal = function() {
+            const modal = document.getElementById('cheerModal');
+            const list = document.getElementById('cheerRunnerList');
+            list.innerHTML = ''; // クリア
+
+            runners.forEach((r, i) => {
+                // 終了したランナーは応援できないことにする
+                if (r.finished) return;
+
+                const btn = document.createElement('button');
+                btn.className = "w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 rounded border border-blue-200 flex items-center justify-between";
+                btn.onclick = () => applyCheer(i);
+                
+                // アイコン表示用HTML
+                const iconHtml = `<img src="${r.marker.options.icon.options.iconUrl}" class="w-8 h-8 rounded-full border border-gray-300 bg-white object-cover">`;
+                
+                btn.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        ${iconHtml}
+                        <span>${r.name}</span>
+                    </div>
+                    <span class="text-xs bg-yellow-400 text-white px-2 py-1 rounded-full">Boost!</span>
+                `;
+                list.appendChild(btn);
+            });
+
+            if (list.children.length === 0) {
+                list.innerHTML = '<div class="text-gray-500 py-4">応援できるランナーがいません</div>';
+            }
+
+            modal.style.display = 'flex';
+        };
+
+        window.closeCheerModal = function() {
+            document.getElementById('cheerModal').style.display = 'none';
+        };
+
+        window.applyCheer = function(runnerIdx) {
+            const r = runners[runnerIdx];
+            if (!r) return;
+
+            // 応援効果: 速度アップ & スタミナ少し回復（永続）
+            r.baseSpeed *= 1.1; 
+            r.stamina = Math.min(1.5, r.stamina * 1.05);
+
+            // AI実況用にイベント追加
+            raceEvents.push(`【応援】${r.name}選手に応援が入りました！ペースが上がっています！`);
+
+            // 演出: ポップアップ (ランナーの位置に表示)
+            const p = gpxPoints[Math.floor(r.idx)];
+            if (p) {
+                const popup = L.popup({
+                    offset: [0, -40],
+                    autoClose: false,
+                    closeOnClick: false,
+                    closeButton: false,
+                    className: 'cheer-popup font-bold text-yellow-600'
+                })
+                .setLatLng([p.lat, p.lon])
+                .setContent(`<div class="text-center animate-bounce">応援ありがとー！！<br><span class="text-xs text-gray-500">to ${r.name}</span></div>`);
+                map.addLayer(popup);
+                setTimeout(() => map.removeLayer(popup), 2000);
+            }
+
+            closeCheerModal();
+        };
+
+        // リザルトモーダル制御
+        window.closeResultModal = function() {
+            document.getElementById('resultModal').style.display = 'none';
+        };
+
+        window.showResultModal = function() {
+            const modal = document.getElementById('resultModal');
+            const podiumArea = document.getElementById('podiumArea');
+            const listArea = document.getElementById('resultListArea');
+            
+            // タイム順にソート (ゴール済みのみを想定、万が一未ゴールがいても最後尾へ)
+            const sorted = [...runners].sort((a, b) => {
+                if(a.finished && b.finished) return a.finishTime.localeCompare(b.finishTime);
+                if(a.finished) return -1;
+                return 1;
+            });
+            
+            // 表彰台生成 (Top 3)
+            let podiumHTML = '';
+            // 表示順: 2位, 1位, 3位
+            const podiumOrder = [1, 0, 2]; 
+            
+            podiumOrder.forEach(idx => {
+                if (!sorted[idx]) return; // ランナーが足りない場合スキップ
+                const r = sorted[idx];
+                const rank = idx + 1; // 実際の順位
+                
+                podiumHTML += `
+                    <div class="podium-item rank-${rank}">
+                        <div class="podium-rank">${rank}</div>
+                        <img src="${r.marker.options.icon.options.iconUrl}" class="podium-icon">
+                        <div class="podium-base text-xs flex-col justify-end pb-2">
+                            <span>${r.name}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            podiumArea.innerHTML = podiumHTML;
+
+            // リスト生成
+            let listHTML = '';
+            sorted.forEach((r, i) => {
+                const rank = i + 1;
+                const time = r.finished ? r.finishTime : "DNF";
+                listHTML += `
+                    <div class="result-row">
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold w-6 text-center text-gray-500">${rank}</span>
+                            <img src="${r.marker.options.icon.options.iconUrl}" class="w-8 h-8 rounded-full border border-gray-200">
+                            <span class="font-medium text-gray-800">${r.name}</span>
+                        </div>
+                        <div class="font-mono font-bold text-blue-600">${time}</div>
+                    </div>
+                `;
+            });
+            listArea.innerHTML = listHTML;
+
+            modal.style.display = 'flex';
+        };
+
+        window.toggleZenMode = function() {
+            const header = document.getElementById('appHeader');
+            isZenMode = !isZenMode;
+            header.style.display = isZenMode ? 'none' : 'flex';
+            setTimeout(() => map.invalidateSize(), 300);
+        };
+
+        window.fitBoundsToTrack = function() {
+            if (currentTrackLayer) {
+                const group = commentLayer ? L.featureGroup([currentTrackLayer, commentLayer]) : currentTrackLayer;
+                map.fitBounds(group.getBounds(), { padding: [20, 20] });
+            }
+        };
+
+        window.togglePlay = function() {
+            if (gpxPoints.length === 0) return;
+            isPlaying = !isPlaying;
+            const playIcon = document.getElementById('icon-play');
+            const pauseIcon = document.getElementById('icon-pause');
+
+            if (isPlaying) {
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+                
+                // AI実況ループ開始
+                startAiCommentaryLoop();
+
+                // もし全員ゴール済みならリセットしてから再生
+                if (runners.every(r => r.finished)) {
+                    resetAnimation();
+                    // resetAnimation内で停止されるので、再度再生フラグを立ててループ開始
+                    isPlaying = true;
+                    playIcon.classList.add('hidden');
+                    pauseIcon.classList.remove('hidden');
+                    animLoop();
+                } else {
+                    animLoop();
+                }
+            } else {
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+                cancelAnimationFrame(animReqId);
+                // AI実況ループ停止
+                stopAiCommentaryLoop();
+            }
+        };
+
+        window.resetAnimation = function() {
+            isPlaying = false;
+            cancelAnimationFrame(animReqId);
+            stopAiCommentaryLoop(); // リセット時も停止
+            initRunners();
+            elapsedTime = 0; 
+            raceEvents = []; // イベントクリア
+            updatePlayerUI();
+            updateTimerDisplay();
+            document.getElementById('icon-play').classList.remove('hidden');
+            document.getElementById('icon-pause').classList.add('hidden');
+            map.closePopup();
+            if(gpxPoints.length > 0) {
+                map.panTo([gpxPoints[0].lat, gpxPoints[0].lon]);
+            }
+        };
+
+        window.seekAnimation = function(val) {
+            const ratio = parseInt(val) / 100;
+            const targetIdx = Math.floor((gpxPoints.length - 1) * ratio);
+            
+            const totalEstimatedSeconds = CHECKPOINT_TARGETS[CHECKPOINT_TARGETS.length-1].targetTime; 
+            elapsedTime = totalEstimatedSeconds * ratio;
+
+            runners.forEach(r => {
+                let variation = (r.baseSpeed - 1.0) * (gpxPoints.length * 0.1); 
+                let idx = targetIdx + variation;
+                if (idx < 0) idx = 0;
+                if (idx >= gpxPoints.length - 1) idx = gpxPoints.length - 1;
+                
+                r.idx = idx;
+                r.finished = false;
+                r.state = 'run';
+                r.resumeTime = 0; 
+                // seekした場合は通過チェックポイントなどをリセットするのが理想だが簡易的にそのまま
+                r.lastCheckpointIdx = -1;
+            });
+            updatePlayerUI();
+            updateTimerDisplay();
+        };
+
+        window.changeSpeed = function() {
+            const currentIdx = SPEED_OPTIONS.indexOf(PLAY_SPEED);
+            const nextIdx = (currentIdx + 1) % SPEED_OPTIONS.length;
+            PLAY_SPEED = SPEED_OPTIONS[nextIdx];
+            document.getElementById('speedBtn').textContent = "x" + PLAY_SPEED;
+        };
+
+        // ==========================================
+        //  AI実況関連
+        // ==========================================
+        window.toggleAiCommentary = function() {
+            isAiCommentaryOn = !isAiCommentaryOn;
+            const btn = document.getElementById('btnAiToggle');
+            const box = document.getElementById('aiCommentaryBox');
+            
+            if (isAiCommentaryOn) {
+                btn.classList.remove('bg-gray-400', 'border-gray-500');
+                btn.classList.add('bg-purple-600', 'border-purple-800');
+                btn.textContent = "AI ON";
+                box.style.display = "flex";
+                if (isPlaying) startAiCommentaryLoop();
+            } else {
+                btn.classList.remove('bg-purple-600', 'border-purple-800');
+                btn.classList.add('bg-gray-400', 'border-gray-500');
+                btn.textContent = "AI OFF";
+                box.style.display = "none";
+                stopAiCommentaryLoop();
+            }
+        };
+
+        function startAiCommentaryLoop() {
+            if (!isAiCommentaryOn || aiInterval) return;
+            // 初回即実行
+            generateRaceCommentary();
+            // その後定期実行 (20秒ごと)
+            aiInterval = setInterval(generateRaceCommentary, 20000);
+        }
+
+        function stopAiCommentaryLoop() {
+            if (aiInterval) {
+                clearInterval(aiInterval);
+                aiInterval = null;
+            }
+        }
+
+        async function callGemini(text) {
+            if (!apiKey) return "APIキーが設定されていないため、AI実況は生成されません。";
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: text }] }]
+            };
+
+            // Exponential backoff
+            const delays = [1000, 2000, 4000];
+            for (let i = 0; i < delays.length; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        return data.candidates?.[0]?.content?.parts?.[0]?.text || "実況生成に失敗しました。";
+                    }
+                } catch (e) {
+                    // retry
+                }
+                await new Promise(r => setTimeout(r, delays[i]));
+            }
+            return "通信エラーが発生しました。";
+        }
+
+        async function generateRaceCommentary() {
+            if (gpxPoints.length === 0) return;
+            if (!isAiCommentaryOn) return;
+
+            const contentEl = document.getElementById('aiCommentaryText');
+            
+            // レース状況データの作成
+            const sortedRunners = [...runners].sort((a, b) => b.idx - a.idx);
+            
+            // 上位3名のみ抽出
+            const top3 = sortedRunners.slice(0, 3).map((r, i) => {
+                const dist = gpxPoints[Math.floor(r.idx)] ? (gpxPoints[Math.floor(r.idx)].totalDist / 1000).toFixed(1) : 0;
+                return `${i+1}位:${r.name}(${dist}km)`;
+            }).join(", ");
+
+            // 直近のイベント (最大3つ) を抽出する際、重要度順にソートする
+            // 優先度: 追い抜き > 通過/ゴール > その他
+            const prioritizedEvents = [...raceEvents].sort((a, b) => {
+                const getScore = (text) => {
+                    if (text.includes("追い抜き")) return 3;
+                    if (text.includes("ゴール")) return 2;
+                    if (text.includes("通過")) return 1;
+                    return 0;
+                };
+                return getScore(b) - getScore(a); // 降順
+            });
+
+            // 上位3つのイベントを採用、なければ空
+            const recentEvents = prioritizedEvents.slice(0, 3).join("、");
+            
+            // イベントバッファをクリア（採用しなかったものも含めてクリアしてOK、古いニュースになるため）
+            raceEvents = []; 
+
+            const prompt = `
+                あなたは伊豆トレイルジャーニー(ITJ)の実況アナウンサーです。
+                
+                【現在の状況】
+                経過時間: ${document.getElementById('raceTimer').textContent}
+                トップ集団: ${top3}
+                
+                【直近の出来事】
+                ${recentEvents || "現在、膠着状態です。"}
+
+                上記【直近の出来事】をもとに実況コメントを**50文字以内**で作成してください。
+                特に「追い抜き」や「順位変動」の情報がある場合は、それを**最優先**で興奮気味に伝えてください。
+                HTMLタグは不可。
+            `;
+
+            let commentary = "";
+            if (!apiKey) {
+                // ダミーコメント (APIキーがない場合用)
+                if (recentEvents) {
+                    commentary = `おっと！${recentEvents} 展開が動いています！`;
+                } else {
+                    const phrases = [
+                        "さあ、レースは中盤戦！各選手懸命な走りを見せています！",
+                        "美しい伊豆の山々をランナーたちが駆け抜けていきます！",
+                        "頑張れ！ゴールはもうすぐだ！ラストスパート！",
+                    ];
+                    commentary = phrases[Math.floor(Math.random() * phrases.length)];
+                }
+            } else {
+                try {
+                    commentary = await callGemini(prompt);
+                } catch (e) {
+                    commentary = "AI実況の生成に失敗しました。";
+                }
+            }
+
+            // アニメーションをリセットするために要素を書き換える
+            const newSpan = document.createElement('span');
+            newSpan.textContent = commentary + "　　　　"; // 余白を入れる
+            
+            // 一瞬リセット
+            contentEl.style.animation = 'none';
+            contentEl.textContent = commentary;
+            contentEl.offsetHeight; /* trigger reflow */
+            contentEl.style.animation = 'marquee 20s linear infinite';
+        }
+
+        // --- 初期化 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            loadGpxFile();
+            addComments();
+        });
+
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([34.86, 138.91], 11);
+            L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
+                maxZoom: 18,
+                attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+            }).addTo(map);
+            addLegend();
+
+            // クリックイベントの追加：コース上の距離と座標を表示
+            map.on('click', function(e) {
+                if (gpxPoints.length === 0) return;
+
+                let nearestPoint = null;
+                let minDistance = Infinity;
+                const clickLat = e.latlng.lat;
+                const clickLng = e.latlng.lng;
+
+                // 最寄りのコース上の点を探す
+                gpxPoints.forEach(p => {
+                    const dist = map.distance([clickLat, clickLng], [p.lat, p.lon]);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        nearestPoint = p;
+                    }
+                });
+
+                // コースから500m以内ならポップアップ表示
+                if (nearestPoint && minDistance < 500) {
+                    const distKm = (nearestPoint.totalDist / 1000).toFixed(1);
+                    
+                    L.popup()
+                        .setLatLng([nearestPoint.lat, nearestPoint.lon])
+                        .setContent(`
+                            <div class="text-center font-sans">
+                                <span class="text-blue-600 font-bold text-lg">${distKm} km地点</span>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    Lat: ${nearestPoint.lat.toFixed(5)}<br>
+                                    Lon: ${nearestPoint.lon.toFixed(5)}
+                                </div>
+                            </div>
+                        `)
+                        .openOn(map);
+                }
+            });
+        }
+
+        function addComments() {
+            if (commentLayer) map.removeLayer(commentLayer);
+            commentLayer = L.featureGroup();
+            courseComments.forEach(comment => {
+                const marker = L.marker([comment.lat, comment.lon])
+                    .bindPopup(comment.text, { className: 'comment-popup', closeButton: false, autoClose: false });
+                marker.addTo(commentLayer);
+            });
+            commentLayer.addTo(map);
+        }
+
+        function loadGpxFile() {
+            // ファイルがないため、常にcatchブロックへ行くように意図的にする、
+            // もしくはfetchで404になるのでcatchで拾われるはず。
+            fetch(GPX_FILE_URL)
+                .then(r => r.ok ? r.text() : Promise.reject(r.status))
+                .then(text => processGPX(text))
+                .catch(() => {
+                    console.warn("外部GPX読み込み失敗。サンプルを使用。");
+                    processGPX(sampleGpxData);
+                });
+        }
+
+        function identifyAidStations() {
+            aidStationIndices = [];
+            courseComments.forEach(c => {
+                if (c.text.includes("エイド") || c.text.includes("休憩") || c.text.includes("駐車場")) {
+                    let minDist = Infinity;
+                    let closestIdx = -1;
+                    gpxPoints.forEach((p, i) => {
+                        const d = map.distance([c.lat, c.lon], [p.lat, p.lon]);
+                        if (d < minDist) {
+                            minDist = d;
+                            closestIdx = i;
+                        }
+                    });
+                    if (closestIdx !== -1 && minDist < 200) { 
+                        aidStationIndices.push(closestIdx);
+                    }
+                }
+            });
+        }
+
+        function calculateSegmentRates() {
+            segmentRates = [];
+            let currentIdx = 0;
+            let currentTime = 0;
+
+            CHECKPOINT_TARGETS.forEach(target => {
+                let targetIdx = -1;
+                const comment = courseComments.find(c => c.text.includes(target.keyword));
+                if (comment) {
+                    let minDist = Infinity;
+                    gpxPoints.forEach((p, i) => {
+                        const d = map.distance([comment.lat, comment.lon], [p.lat, p.lon]);
+                        if (d < minDist) {
+                            minDist = d;
+                            targetIdx = i;
+                        }
+                    });
+                } else {
+                    if (target.keyword === "ゴール") targetIdx = gpxPoints.length - 1;
+                }
+
+                if (targetIdx !== -1 && targetIdx > currentIdx) {
+                    const distPoints = targetIdx - currentIdx; 
+                    const durationSeconds = target.targetTime - currentTime; 
+                    
+                    if (durationSeconds > 0) {
+                        const pointsPerFrame = distPoints / (durationSeconds / FRAME_DURATION);
+                        segmentRates.push({
+                            endIdx: targetIdx,
+                            rate: pointsPerFrame
+                        });
+                    }
+                    currentIdx = targetIdx;
+                    currentTime = target.targetTime;
+                }
+            });
+            
+            if (currentIdx < gpxPoints.length - 1) {
+                segmentRates.push({
+                    endIdx: gpxPoints.length - 1,
+                    rate: 1.0 
+                });
+            }
+        }
+
+        async function initRunners() {
+            runners.forEach(r => { if(r.marker) map.removeLayer(r.marker); });
+            runners = [];
+            const startPt = gpxPoints[0] || {lat:0, lon:0};
+            lastRankMap = {};
+
+            const runnerPromises = RUNNER_CONFIGS.map(async (config, i) => {
+                // スピード: 0.85 ~ 1.15
+                const randomSpeed = 0.85 + Math.random() * 0.3; 
+                const randomStamina = 0.8 + Math.random() * 0.4;
+
+                const iconUrl = await getIconUrl(config);
+
+                const icon = L.icon({
+                    iconUrl: iconUrl,
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 20],
+                    className: 'custom-runner-icon'
+                });
+
+                const marker = L.marker([startPt.lat, startPt.lon], {
+                    icon: icon,
+                    zIndexOffset: 2000 - (i * 100) 
+                }).addTo(map);
+                
+                marker.bindTooltip(config.name, { 
+                    permanent: false, 
+                    direction: 'top',
+                    className: 'text-xs font-bold'
+                });
+
+                return {
+                    id: i,
+                    name: config.name,
+                    color: config.color,
+                    baseSpeed: randomSpeed, 
+                    stamina: randomStamina, 
+                    idx: 0, 
+                    state: 'run', 
+                    resumeTime: 0, 
+                    restedStations: new Set(), 
+                    finished: false,
+                    finishTime: null, 
+                    marker: marker,
+                    lastCheckpointIdx: -1 
+                };
+            });
+
+            runners = await Promise.all(runnerPromises);
+            
+            // 初期順位マップの作成
+            runners.forEach((r, i) => {
+                lastRankMap[r.id] = i; 
+            });
+
+            document.getElementById('raceStatus').style.display = 'block';
+            updateLeaderboard();
+        }
+
+        function processGPX(xmlString) {
+            try {
+                if (currentTrackLayer) {
+                    map.removeLayer(currentTrackLayer);
+                    currentTrackLayer = null;
+                }
+
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+                const trkpts = xmlDoc.getElementsByTagName("trkpt");
+
+                if (trkpts.length === 0) return alert("トラックデータがありません");
+
+                let rawPoints = [];
+                for (let i = 0; i < trkpts.length; i++) {
+                    const lat = parseFloat(trkpts[i].getAttribute("lat"));
+                    const lon = parseFloat(trkpts[i].getAttribute("lon"));
+                    const ele = parseFloat(trkpts[i].getElementsByTagName("ele")[0]?.textContent || 0);
+                    rawPoints.push({ lat, lon, ele });
+                }
+
+                if (REVERSE_GPX_ORDER) rawPoints.reverse();
+
+                // === 補間処理 (約10mごと) ===
+                const interpolatedPoints = [];
+                const INTERVAL = 10; 
+
+                if (rawPoints.length > 0) {
+                    interpolatedPoints.push(rawPoints[0]);
+                    for (let i = 0; i < rawPoints.length - 1; i++) {
+                        const p1 = rawPoints[i];
+                        const p2 = rawPoints[i+1];
+                        const dist = map.distance([p1.lat, p1.lon], [p2.lat, p2.lon]);
+                        if (dist > INTERVAL) {
+                            const steps = Math.floor(dist / INTERVAL);
+                            for (let j = 1; j <= steps; j++) {
+                                const ratio = j / (steps + 1);
+                                const lat = p1.lat + (p2.lat - p1.lat) * ratio;
+                                const lon = p1.lon + (p2.lon - p1.lon) * ratio;
+                                const ele = p1.ele + (p2.ele - p1.ele) * ratio;
+                                interpolatedPoints.push({ lat, lon, ele });
+                            }
+                        }
+                        interpolatedPoints.push(p2);
+                    }
+                }
+
+                const points = [];
+                let totalDist = 0;
+                minEle = Infinity;
+                maxEle = -Infinity;
+
+                for (let i = 0; i < interpolatedPoints.length; i++) {
+                    const p = interpolatedPoints[i];
+                    if (i > 0) {
+                        const prev = interpolatedPoints[i-1];
+                        const dist = map.distance([prev.lat, prev.lon], [p.lat, p.lon]);
+                        totalDist += dist;
+                    }
+                    if (p.ele < minEle) minEle = p.ele;
+                    if (p.ele > maxEle) maxEle = p.ele;
+                    points.push({ lat: p.lat, lon: p.lon, ele: p.ele, totalDist: totalDist });
+                }
+
+                gpxPoints = points;
+                routeTotalDistance = totalDist;
+
+                document.getElementById('totalDistDisplay').textContent = "/ " + (totalDist / 1000).toFixed(1) + "km";
+                document.getElementById('progressSlider').max = 100; 
+
+                drawColoredTrack(points);
+                drawElevationChart(points);
+                
+                // 時間経過のスケール計算
+                if (routeTotalDistance > 0) {
+                    const targetSeconds = 38400; // 平均ターゲット
+                    const totalFrames = routeTotalDistance / 10; // 10m刻み
+                    timeStep = targetSeconds / totalFrames;
+                }
+
+                identifyAidStations();
+                calculateSegmentRates(); 
+                initRunners();
+                addComments(); 
+
+            } catch (err) {
+                console.error("GPX解析エラー:", err);
+                alert("GPXファイルの読み込みに失敗しました。");
+            }
+        }
+
+        function drawElevationChart(points) {
+            const path = document.getElementById('elevationPath');
+            if (points.length < 2) return;
+            let d = `M 0,100 `;
+            const eleRange = maxEle - minEle;
+            const eleBottom = minEle - eleRange * 0.1;
+            const eleHeight = eleRange * 1.2; 
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i];
+                const x = (p.totalDist / routeTotalDistance) * 100;
+                const y = 100 - ((p.ele - eleBottom) / eleHeight) * 100;
+                d += `L ${x.toFixed(2)},${y.toFixed(2)} `;
+            }
+            d += `L 100,100 Z`;
+            path.setAttribute('d', d);
+        }
+
+        function drawColoredTrack(points) {
+            if (currentTrackLayer) map.removeLayer(currentTrackLayer);
+            currentTrackLayer = L.featureGroup();
+            const canvasRenderer = L.canvas({ padding: 0.5 });
+            for (let i = 0; i < points.length - 1; i++) {
+                const p1 = points[i];
+                const p2 = points[i+1];
+                const eleDiff = p2.ele - p1.ele;
+                const dist = p2.totalDist - p1.totalDist;
+                let color = "#66bd63";
+                if (dist > 0) {
+                    const gradient = (eleDiff / dist) * 100;
+                    if (gradient >= 5) color = "#d73027";
+                    else if (gradient >= 1) color = "#fc8d59";
+                    else if (gradient > -1) color = "#66bd63";
+                    else if (gradient > -5) color = "#4575b4";
+                    else color = "#313695";
+                }
+                L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
+                    color: color, weight: 5, opacity: 0.8, renderer: canvasRenderer
+                }).addTo(currentTrackLayer);
+            }
+            currentTrackLayer.addTo(map);
+            map.fitBounds(currentTrackLayer.getBounds(), { padding: [20, 20] });
+        }
+
+        function addLegend() {
+            const legend = L.control({position: 'topright'});
+            legend.onAdd = function () {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = `
+                    <div style="font-weight:bold; margin-bottom:4px; border-bottom:1px solid #ddd;">勾配</div>
+                    <div><i style="background: #d73027"></i> 急な上り</div>
+                    <div><i style="background: #fc8d59"></i> 上り</div>
+                    <div><i style="background: #66bd63"></i> 平坦</div>
+                    <div><i style="background: #4575b4"></i> 下り</div>
+                    <div><i style="background: #313695"></i> 急な下り</div>
+                `;
+                return div;
+            };
+            legend.addTo(map);
+        }
+
+        function animLoop() {
+            if (!isPlaying) return;
+            
+            let anyoneRunning = false;
+            
+            elapsedTime += FRAME_DURATION * PLAY_SPEED; 
+            updateTimerDisplay();
+
+            runners.forEach(r => {
+                if (r.finished) return;
+                anyoneRunning = true;
+
+                // 休憩処理: 時間ベースに変更
+                if (r.state === 'stop') {
+                    if (elapsedTime >= r.resumeTime) {
+                        r.state = 'run';
+                        r.idx += 1.0; 
+                    }
+                    return; 
+                }
+
+                aidStationIndices.forEach((aidIdx, aidId) => {
+                    if (Math.abs(r.idx - aidIdx) < 5 && !r.restedStations.has(aidId)) {
+                        if (Math.random() < 0.9) {
+                            r.state = 'stop';
+                            // 休憩時間: 1分(60秒) ~ 10分(600秒)
+                            const restDuration = 60 + Math.random() * 540; 
+                            r.resumeTime = elapsedTime + restDuration;
+                            r.restedStations.add(aidId);
+                        } else {
+                            r.restedStations.add(aidId);
+                        }
+                    }
+                });
+
+                if (r.state === 'stop') return;
+
+                let segmentRate = 1.0;
+                for (let seg of segmentRates) {
+                    if (r.idx < seg.endIdx) {
+                        segmentRate = seg.rate;
+                        break;
+                    }
+                }
+
+                const progress = r.idx / (gpxPoints.length - 1);
+                const staminaFactor = 1.0 + (r.stamina - 1.0) * progress; 
+                const noise = 0.9 + Math.random() * 0.2; 
+                
+                const moveAmount = segmentRate * r.baseSpeed * PLAY_SPEED * noise * Math.max(0.5, staminaFactor);
+                
+                r.idx += moveAmount;
+
+                // --- イベント検知 (通過) ---
+                if (gpxPoints.length > 0) {
+                    const currentIdx = Math.floor(r.idx);
+                    
+                    // 安全策: インデックス範囲チェック & myPos取得チェック
+                    if (currentIdx >= 0 && currentIdx < gpxPoints.length) {
+                        const myPos = gpxPoints[currentIdx];
+
+                        // まだ通過していないコメントポイントをチェック
+                        courseComments.forEach((c) => {
+                            // コメント地点に近いGPXポイントを探す（ロード時にマッピングしておくのが効率的だが今回は簡易検索）
+                            // 既にチェック済みの場所より先にあるか判定
+                            if (r.lastCheckpointIdx < currentIdx) {
+                                let minDist = Infinity;
+                                let cIdx = -1;
+                                // 周辺探索 (全探索は重いので、現在のインデックス周辺 ±100点くらいを見る)
+                                // 簡易的に距離判定
+                                
+                                const dist = map.distance([myPos.lat, myPos.lon], [c.lat, c.lon]);
+                                
+                                // 100m以内で、かつ前回のチェックポイントより先なら通過とみなす
+                                // (ただしイベントの重複を防ぐため、単純に「最も近いポイントを通過した瞬間」を捉えるのは難しいので
+                                //  距離が近づいたときに1回だけ発火させる簡易ロジックにする)
+                                // ここではシンプルに「特定のランドマーク名を含むコメント地点」を通過したかチェック
+                                if (dist < 50 && !r.passedLandmarks?.has(c.text)) {
+                                    if (!r.passedLandmarks) r.passedLandmarks = new Set();
+                                    r.passedLandmarks.add(c.text);
+                                    
+                                    // HTMLタグ除去してテキスト抽出
+                                    const plainText = c.text.replace(/<[^>]*>/g, '');
+                                    
+                                    // 指定された主要ポイントのみ実況イベントに追加するフィルタリング
+                                    const matchedKeyword = COMMENTARY_TARGET_KEYWORDS.find(keyword => plainText.includes(keyword));
+                                    
+                                    if (matchedKeyword) {
+                                        // 実況用に少し表記を整える（"土肥" -> "土肥駐車場エイド"など元のテキストを活かすか、キーワードを使うか）
+                                        // ここではシンプルにキーワードを使う、または元のテキストから地名部分っぽいものを抽出
+                                        let placeName = matchedKeyword;
+                                        if (placeName === "達磨山") placeName = "だるま山"; // 読みやすく変換
+
+                                        raceEvents.push(`【通過】${r.name}選手が「${placeName}」を通過しました！`);
+                                    }
+                                }
+                            }
+                        });
+                        r.lastCheckpointIdx = currentIdx;
+                    }
+                }
+
+                if (r.idx >= gpxPoints.length - 1) {
+                    r.idx = gpxPoints.length - 1;
+                    if (!r.finished) {
+                        r.finished = true;
+                        r.finishTime = document.getElementById('raceTimer').textContent;
+                        raceEvents.push(`【ゴール】${r.name}選手がゴールしました！タイム: ${r.finishTime}`);
+                    }
+                }
+            });
+
+            if (!anyoneRunning) {
+                isPlaying = false;
+                updatePlayerUI();
+                updateLeaderboard(); 
+                showResultModal(); // 全員ゴールしたらリザルト表示
+                return;
+            }
+
+            updatePlayerUI();
+            checkAndShowComment();
+            updateLeaderboard();
+
+            animReqId = requestAnimationFrame(animLoop);
+        }
+
+        function updatePlayerUI() {
+            runners.forEach(r => {
+                const i = Math.floor(r.idx);
+                const p = gpxPoints[i];
+                if (p) {
+                    r.marker.setLatLng([p.lat, p.lon]);
+                    const opacity = r.state === 'stop' ? 0.5 : 1.0;
+                    if (typeof r.marker.setOpacity === 'function') {
+                        r.marker.setOpacity(opacity);
+                    }
+                }
+            });
+
+            const me = runners[0];
+            const myP = gpxPoints[Math.floor(me.idx)];
+            if (myP) {
+                map.panTo([myP.lat, myP.lon], { animate: false }); 
+                const percent = (me.idx / (gpxPoints.length - 1)) * 100;
+                document.getElementById('progressSlider').value = percent;
+                document.getElementById('currentDistDisplay').textContent = (myP.totalDist / 1000).toFixed(1) + "km";
+
+                const chartMarker = document.getElementById('elevationMarker');
+                if (chartMarker) {
+                    const eleRange = maxEle - minEle;
+                    const eleBottom = minEle - eleRange * 0.1;
+                    const eleHeight = eleRange * 1.2;
+                    const x = (myP.totalDist / routeTotalDistance) * 100;
+                    const y = 100 - ((myP.ele - eleBottom) / eleHeight) * 100;
+                    chartMarker.style.display = 'block';
+                    chartMarker.setAttribute('cx', x + '%');
+                    chartMarker.setAttribute('cy', y + '%');
+                    document.getElementById('currentEleDisplay').textContent = Math.round(myP.ele) + "m";
+                }
+            }
+        }
+
+        function updateTimerDisplay() {
+            const hours = Math.floor(elapsedTime / 3600);
+            const minutes = Math.floor((elapsedTime % 3600) / 60);
+            const seconds = Math.floor(elapsedTime % 60);
+            const timeStr = 
+                String(hours).padStart(2, '0') + ':' + 
+                String(minutes).padStart(2, '0') + ':' + 
+                String(seconds).padStart(2, '0');
+            document.getElementById('raceTimer').textContent = timeStr;
+        }
+
+        function updateLeaderboard() {
+            const sortedRunners = [...runners].sort((a, b) => {
+                if (a.finished && b.finished) {
+                    return a.finishTime.localeCompare(b.finishTime);
+                }
+                if (a.finished) return -1; 
+                if (b.finished) return 1;
+                return b.idx - a.idx;
+            });
+            
+            // 順位変動チェック (追い抜き検知)
+            sortedRunners.forEach((r, index) => {
+                const currentRank = index;
+                const prevRank = lastRankMap[r.id];
+                if (prevRank !== undefined && currentRank < prevRank) {
+                    // 順位が上がった
+                    const overtaken = sortedRunners[currentRank + 1]; // 抜かれた人（たぶん）
+                    if (overtaken) {
+                        raceEvents.push(`【追い抜き】${r.name}選手が${overtaken.name}選手を追い抜きました！`);
+                    }
+                }
+                lastRankMap[r.id] = currentRank;
+            });
+
+            let html = '<div class="flex flex-col gap-1">';
+            sortedRunners.forEach((r, i) => {
+                let statusText = "";
+                if (r.finished) {
+                    statusText = `<span class="text-red-600 font-bold">Goal! ${r.finishTime}</span>`;
+                } else {
+                    const distKm = gpxPoints[Math.floor(r.idx)] ? (gpxPoints[Math.floor(r.idx)].totalDist / 1000).toFixed(1) : "0.0";
+                    const stateIcon = r.state === 'stop' ? "☕" : "🏃";
+                    statusText = `${distKm}km ${stateIcon}`;
+                }
+                const style = r.id === 0 ? "font-weight:bold; color:#2563eb;" : "color:#444;";
+                html += `
+                <div style="${style} display:flex; justify-content:space-between; align-items:center;">
+                    <span>${i+1}. <span style="color:${r.color}">●</span> ${r.name}</span>
+                    <span style="font-size:10px; margin-left:8px;">${statusText}</span>
+                </div>`;
+            });
+            html += '</div>';
+            document.getElementById('leaderboardContent').innerHTML = html;
+        }
+
+        function checkAndShowComment() {
+            const me = runners[0];
+            const currentP = gpxPoints[Math.floor(me.idx)];
+            if (!currentP) return;
+            courseComments.forEach((c) => {
+                const dist = map.distance([currentP.lat, currentP.lon], [c.lat, c.lon]);
+                if (dist < 150) {
+                    L.popup({ autoClose: true, closeOnClick: false, offset: [0, -10] })
+                        .setLatLng([c.lat, c.lon]).setContent(c.text).openOn(map);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
