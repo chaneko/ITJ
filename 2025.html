@@ -318,7 +318,7 @@
                 <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
                 <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z" />
             </svg>
-            AI実況 LIVE
+            実況 LIVE
         </div>
         <div id="aiCommentaryText">
             レース開始準備中... AI実況がここに流れます...
@@ -342,7 +342,8 @@
     </div>
 
     <!-- 再生コントロールパネル（下部・コンパクト） -->
-    <div class="player-controls">
+    <!-- IDを追加: playerControls -->
+    <div id="playerControls" class="player-controls">
         <!-- 再生ボタン -->
         <button onclick="togglePlay()" id="playBtn" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full shadow transition flex-shrink-0">
             <svg id="icon-play" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -375,7 +376,8 @@
     </div>
     
     <!-- 右下ボタン群（下揃え・横並び） -->
-    <div class="absolute bottom-12 right-4 z-[900] flex flex-row gap-3">
+    <!-- IDを追加: bottomRightControls -->
+    <div id="bottomRightControls" class="absolute bottom-12 right-4 z-[900] flex flex-row gap-3">
         <!-- AI実況ON/OFFボタン -->
         <button onclick="toggleAiCommentary()" id="btnAiToggle" class="bg-purple-600 text-white p-2.5 rounded-full shadow-lg hover:bg-purple-700 transition border border-purple-800 flex items-center justify-center font-bold text-xs" title="AI実況 ON/OFF">
             &#x2728; AI実況
@@ -449,7 +451,9 @@
         // ==========================================
         const GPX_FILE_URL = 'ITJ_course_2025.gpx'; 
         const REVERSE_GPX_ORDER = true; 
-        const apiKey = ""; // Gemini API Key
+        
+        // APIキーの設定（リファラー制限付きのAPIキーをここに記述してください）
+        const apiKey = "AIzaSyAMjV58sFvYb5jw5RfibO1Vo8fwxSZCKZM"; 
 
         // アニメーション設定
         let PLAY_SPEED = 1; 
@@ -466,7 +470,7 @@
             { name: "\u3076\u30fc\u3061\u3093", color: "#22c55e", fileName: "\u3076\u30fc\u3061\u3093.png", fallbackText: "Boo", type: "start_dash", restMin: 45, restMax: 120 }, // ぶーちん
             { name: "\u3084\u3063\u3061", color: "#a855f7", fileName: "\u3084\u3063\u3061.png", fallbackText: "Yat", type: "negative_split", restMin: 60, restMax: 240 }, // やっち
             { name: "\u3058\u3085\u3093", color: "#06b6d4", fileName: "\u3058\u3085\u3093.png", fallbackText: "Jun", type: "even", restMin: 60, restMax: 180 }, // じゅん
-            { name: "\u3061\u3083\u306d", color: "#eab308", fileName: "\u3061\u3083\u306d.png", fallbackText: "Cha", type: "negative_split", restMin: 120, restMax: 360 } // ちゃね
+            { name: "\u3061\u3083\u306d", color: "#eab308", fileName: "\u3061\u3083\u306d.png", fallbackText: "Cha", type: "negative_split", restMin: 30, restMax: 120 } // ちゃね
         ];
         let runners = []; 
         let aidStationIndices = []; 
@@ -659,7 +663,7 @@
             r.stamina = Math.min(1.5, r.stamina * 1.05);
 
             // AI実況用にイベント追加
-            raceEvents.push(`\u3010\u5fdc\u63f4\u3011${r.name}\u9078\u624b\u306b\u5fdc\u63f4\u304c\u5165\u308a\u307e\u3057\u305f\uff01\u30da\u30fc\u30b9\u304c\u4e0a\u304c\u3063\u3066\u3044\u307e\u3059\uff01`);
+            raceEvents.push(`\u3010\u5fdc\u63f4\u3011${r.name}\u306b\u5fdc\u63f4\u304c\u5165\u308a\u307e\u3057\u305f\uff01\u30da\u30fc\u30b9\u304c\u4e0a\u304c\u3063\u3066\u3044\u307e\u3059\uff01`);
 
             // 演出: ポップアップ (ランナーの位置に表示)
             const p = gpxPoints[Math.floor(r.idx)];
@@ -848,6 +852,7 @@
                 btn.classList.add('bg-purple-600', 'border-purple-800');
                 btn.textContent = "AI ON";
                 box.style.display = "flex";
+                
                 if (isPlaying) startAiCommentaryLoop();
             } else {
                 btn.classList.remove('bg-purple-600', 'border-purple-800');
@@ -947,6 +952,7 @@
 
                 上記【直近の出来事】をもとに実況コメントを**50文字以内**で作成してください。
                 特に「追い抜き」や「順位変動」の情報がある場合は、それを**最優先**で興奮気味に伝えてください。
+                ランナー名は呼び捨てにしてください。「選手」は付けないでください。
                 HTMLタグは不可。
             `;
 
@@ -957,9 +963,23 @@
                     commentary = `\u304a\u3063\u3068\uff01${recentEvents} \u5c55\u958b\u304c\u52d5\u3044\u3066\u3044\u307e\u3059\uff01`;
                 } else {
                     const phrases = [
-                        "\u3055\u3042\u3001\u30ec\u30fc\u30b9\u306f\u4e2d\u76e4\u6226\uff01\u5404\u9078\u624b\u61f8\u547d\u306a\u8d70\u308a\u3092\u898b\u305b\u3066\u3044\u307e\u3059\uff01",
+                        // 既存
+                        "\u3055\u3042\u3001\u30ec\u30fc\u30b9\u306f\u4e2d\u76e4\u6226\uff01\u5404\u30e9\u30f3\u30ca\u30fc\u61f8\u547d\u306a\u8d70\u308a\u3092\u898b\u305b\u3066\u3044\u307e\u3059\uff01",
                         "\u7f8e\u3057\u3044\u4f0a\u8c46\u306e\u5c71\u3005\u3092\u30e9\u30f3\u30ca\u30fc\u305f\u3061\u304c\u99c6\u3051\u629c\u3051\u3066\u3044\u304d\u307e\u3059\uff01",
                         "\u9811\u5f35\u308c\uff01\u30b4\u30fc\u30eb\u306f\u3082\u3046\u3059\u3050\u3060\uff01\u30e9\u30b9\u30c8\u30b9\u30d1\u30fc\u30c8\uff01",
+                        
+                        // 追加バリエーション
+                        "\u3053\u306e\u6025\u306a\u4e0a\u308a\u5742\u3001\u8ab0\u304c\u5236\u3059\u308b\u306e\u304b\uff01\uff1f", // この急な上り坂、誰が制するのか！？
+                        "\u4e0b\u308a\u5742\u3067\u306e\u30b9\u30d4\u30fc\u30c9\u52dd\u8ca0\uff01\u8ee2\u5012\u306b\u6c17\u3092\u3064\u3051\u3066\uff01", // 下り坂でのスピード勝負！転倒に気をつけて！
+                        "\u30a8\u30a4\u30c9\u30b9\u30c6\u30fc\u30b7\u30e7\u30f3\u3067\u306e\u88dc\u7d66\u304c\u52dd\u8ca0\u306e\u9375\u3092\u63e1\u308a\u307e\u3059\uff01", // エイドステーションでの補給が勝負の鍵を握ります！
+                        "\u7d76\u666f\u306e\u7a1c\u7dda\u30c8\u30ec\u30a4\u30eb\uff01\u6c17\u6301\u3061\u3088\u3051\u308c\u3070\u6700\u9ad8\u3067\u3059\u306d\uff01", // 絶景の稜線トレイル！気持ちよければ最高ですね！
+                        "\u30c8\u30c3\u30d7\u4e89\u3044\u304c\u6fc0\u5316\u3057\u3066\u304d\u307e\u3057\u305f\uff01\u76ee\u304c\u96e2\u305b\u307e\u305b\u3093\uff01", // トップ争いが激化してきました！目が離せません！
+                        "\u75b2\u308c\u304c\u898b\u3048\u59cb\u3081\u308b\u6642\u9593\u5e2f\u3001\u3053\u3053\u304c\u8e0f\u3093\u5f35\u308a\u3069\u3053\u308d\u3067\u3059\uff01", // 疲れが見え始める時間帯、ここが踏ん張りどころです！
+                        "\u89b3\u5ba2\u306e\u58f0\u634f\u304c\u30e9\u30f3\u30ca\u30fc\u306e\u529b\u306b\u306a\u308a\u307e\u3059\uff01\u30ca\u30a4\u30b9\u30e9\u30f3\uff01", // 観客の声援がランナーの力になります！ナイスラン！
+                        "\u4e00\u6b69\u4e00\u6b69\u3001\u78ba\u5b9f\u306b\u30b4\u30fc\u30eb\u3078\u8fd1\u3065\u3044\u3066\u3044\u307e\u3059\u3002", // 一歩一歩、確実にゴールへ近づいています。
+                        "\u7d20\u6674\u3089\u3057\u3044\u8d70\u308a\u3067\u3059\uff01\u611f\u52d5\u3092\u3042\u308a\u304c\u3068\u3046\uff01", // 素晴らしい走りです！感動をありがとう！
+                        "\u53e4\u9053\u306e\u96f0\u56f2\u6c17\u3092\u611f\u3058\u306a\u304c\u3089\u3001\u30e9\u30f3\u30ca\u30fc\u305f\u3061\u304c\u9032\u307f\u307e\u3059\u3002", // 古道の雰囲気を感じながら、ランナーたちが進みます。
+                        "\u3055\u3042\u3001\u81ea\u5206\u3068\u306e\u6226\u3044\u3060\uff01\u8ca0\u3051\u308b\u306a\uff01" // さあ、自分との戦いだ！負けるな！
                     ];
                     commentary = phrases[Math.floor(Math.random() * phrases.length)];
                 }
@@ -1031,6 +1051,25 @@
                             </div>
                         `)
                         .openOn(map);
+                }
+            });
+
+            // --- モバイル対応: UI操作が地図に伝播しないようにする ---
+            // IDを追加した要素を取得
+            const uiElements = [
+                document.getElementById('raceStatus'),
+                document.getElementById('elevationChartContainer'),
+                document.getElementById('playerControls'),
+                document.getElementById('bottomRightControls'),
+                document.getElementById('aiCommentaryBox')
+            ];
+
+            uiElements.forEach(el => {
+                if (el) {
+                    // タップやクリックが地図の操作にならないようにする
+                    L.DomEvent.disableClickPropagation(el);
+                    // スクロール操作が地図のズームなどにならないようにする
+                    L.DomEvent.disableScrollPropagation(el);
                 }
             });
         }
