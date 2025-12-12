@@ -122,6 +122,12 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.5);
             background: white;
             object-fit: cover;
+            cursor: pointer; /* クリック可能であることを示す */
+            transition: transform 0.1s;
+        }
+        .custom-runner-icon:hover {
+            transform: scale(1.1);
+            z-index: 1000 !important;
         }
         
         /* 応援吹き出し */
@@ -303,6 +309,7 @@
     <div id="raceStatus">
         <div id="raceTimer" class="text-xl font-bold text-center mb-2 font-mono text-gray-800 bg-gray-100 rounded py-1">00:00:00</div>
         <div class="font-bold border-b border-gray-300 mb-1 pb-1 text-gray-600">Leaderboard</div>
+        <div class="text-xs text-gray-400 mb-2">※クリックで追随</div>
         <div id="leaderboardContent"></div>
     </div>
 
@@ -402,7 +409,7 @@
     <!-- 応援モーダル -->
     <div id="cheerModal" class="modal-overlay">
         <div class="modal-content">
-            <h3 class="text-lg font-bold mb-4 text-gray-800">📣 誰を応援する？</h3>
+            <h3 class="text-lg font-bold mb-4 text-gray-800">=ﾘ聢 誰を応援する？</h3>
             <div id="cheerRunnerList" class="flex flex-col gap-3">
                 <!-- JSで生成 -->
             </div>
@@ -413,7 +420,7 @@
     <!-- リザルトモーダル -->
     <div id="resultModal" class="modal-overlay">
         <div class="modal-content">
-            <h2 class="text-2xl font-bold mb-2 text-gray-800">🏆 Race Results 🏆</h2>
+            <h2 class="text-2xl font-bold mb-2 text-gray-800"><ﾘﾆﾟ Race Results <ﾘﾆﾟ</h2>
             <div class="text-sm text-gray-500 mb-4">全員ゴールしました！お疲れ様でした！</div>
             
             <!-- 表彰台エリア -->
@@ -464,6 +471,7 @@
         let runners = []; 
         let aidStationIndices = []; 
         let elapsedTime = 0; 
+        let followedRunnerId = 0; // 現在追随中のランナーID (初期値0)
         
         // AI実況関連
         let isAiCommentaryOn = true; // デフォルトON
@@ -478,25 +486,25 @@
         //  コメントデータ
         // ==========================================
         const courseComments = [
-            { lat: 34.7622, lon: 138.7757, text: "<b>🚩 スタート：松崎港</b><br>Aブロックの先頭集団のスタートは迫力あるよー。" },
-            { lat: 34.78945, lon: 138.83531, text: "<b>⛰️ 宝蔵院</b><br>ここまで全部のぼりー" },
-            { lat: 34.7841, lon: 138.8448, text: "<b>🌲 八瀬峠</b><br>走れる林道。シングルトラック抜けた後だけど足温存で。" },
-            { lat: 34.8098, lon: 138.8808, text: "<b>🏔️ 諸坪峠</b><br>ここからがっつり下りで走れちゃう。去年は清宮さんここで転んでDNFしてます。" },
-            { lat: 34.81527, lon: 138.89888, text: "<b>🍡 こがね橋エイド</b><br>桜葉もちは一人ひとつね<br>ここから二本杉までがっつり登るよー" },
-            { lat: 34.82977, lon: 138.90792, text: "<b>🏔️ 二本杉峠</b>" },
-            { lat: 34.86169, lon: 138.84546, text: "<b>🔭 仁科展望台</b>" },
-            { lat: 34.87064, lon: 138.84383, text: "<b>🍝 仁科エイド</b><br>塩カツオうどんは食べてって！！" },
-            { lat: 34.93452, lon: 138.83172, text: "<b>🍲 土肥駐車場エイド</b><br>しし汁という名の豚汁！" },
+            { lat: 34.7622, lon: 138.7757, text: "<b>=ﾘｩﾞ スタート：松崎港</b><br>Aブロックの先頭集団のスタートは迫力あるよー。" },
+            { lat: 34.78945, lon: 138.83531, text: "<b>&︀ 宝蔵院</b><br>ここまで全部のぼりー" },
+            { lat: 34.7841, lon: 138.8448, text: "<b><ﾘ2ﾟ 八瀬峠</b><br>走れる林道。シングルトラック抜けた後だけど足温存で。" },
+            { lat: 34.8098, lon: 138.8808, text: "<b><ﾘﾔﾟ︀ 諸坪峠</b><br>ここからがっつり下りで走れちゃう。去年は清宮さんここで転んでDNFしてます。" },
+            { lat: 34.81527, lon: 138.89888, text: "<b><ﾘaﾟ こがね橋エイド</b><br>桜葉もちは一人ひとつね<br>ここから二本杉までがっつり登るよー" },
+            { lat: 34.82977, lon: 138.90792, text: "<b><ﾘﾔﾟ︀ 二本杉峠</b>" },
+            { lat: 34.86169, lon: 138.84546, text: "<b>=ﾘ-ﾝ 仁科展望台</b>" },
+            { lat: 34.87064, lon: 138.84383, text: "<b><ﾘ]ﾟ 仁科エイド</b><br>塩カツオうどんは食べてって！！" },
+            { lat: 34.93452, lon: 138.83172, text: "<b><ﾘrﾟ 土肥駐車場エイド</b><br>しし汁という名の豚汁！" },
             { lat: 34.93624, lon: 138.83371, text: "ここで振り向いたら駿河湾が綺麗に見えるよ" },
-            { lat: 34.95498, lon: 138.83926, text: "<b>🏔️ 達磨山</b><br>晴れてたら素敵な景色！！晴れてたら！！" },
-            { lat: 34.96425, lon: 138.83842, text: "<b>🏔️ 小達磨山</b><br>これがラスボス。後は降るだけ。" },
+            { lat: 34.95498, lon: 138.83926, text: "<b><ﾘﾔﾟ︀ 達磨山</b><br>晴れてたら素敵な景色！！晴れてたら！！" },
+            { lat: 34.96425, lon: 138.83842, text: "<b><ﾘﾔﾟ︀ 小達磨山</b><br>これがラスボス。後は降るだけ。" },
             { lat: 34.97410, lon: 138.83662, text: "芝生ふかふかご褒美ぞーんだよ" },
             { lat: 34.97532, lon: 138.85052, text: "トイレあるよ。ブリーフィングでは閉鎖されてるって言ってたけど。" },
             { lat: 34.97501, lon: 138.85045, text: "この辺はガレガレ。捻挫注意ね" },
             { lat: 34.97087, lon: 138.86076, text: "地味に登ってる気がするけど気のせいだからね。" },
-            { lat: 34.96631, lon: 138.89426, text: "<b>⚠️ 注意</b><br>このあたりだったと思うんだけど、いきなり凹んでるとこあるから気を付けて！！" },
+            { lat: 34.96631, lon: 138.89426, text: "<b>ꀀ&︀ 注意</b><br>このあたりだったと思うんだけど、いきなり凹んでるとこあるから気を付けて！！" },
             { lat: 34.96885, lon: 138.90517, text: "ここからロード！！みんな意外とちゃんと走るよ" },
-            { lat: 34.97038, lon: 138.92860, text: "<b>♨️ ゴール：修善寺</b>" }
+            { lat: 34.97038, lon: 138.92860, text: "<b>h&︀ ゴール：修善寺</b>" }
         ];
 
         const CHECKPOINT_TARGETS = [
@@ -583,6 +591,12 @@
                 processGPX(e.target.result);
             };
             reader.readAsText(file);
+        };
+
+        window.changeFollowedRunner = function(id) {
+            followedRunnerId = id;
+            updateLeaderboard();
+            updatePlayerUI(); // 即座にカメラ移動
         };
 
         // 画像の存在をチェックしてURLを返す関数
@@ -1141,6 +1155,9 @@
                     className: 'text-xs font-bold'
                 });
 
+                // マーカークリックで追随対象を変更
+                marker.on('click', () => changeFollowedRunner(i));
+
                 return {
                     id: i,
                     name: config.name,
@@ -1460,8 +1477,10 @@
                 }
             });
 
-            const me = runners[0];
+            // 追随対象のランナーを取得 (見つからなければ先頭のランナー)
+            const me = runners.find(r => r.id === followedRunnerId) || runners[0];
             const myP = gpxPoints[Math.floor(me.idx)];
+            
             if (myP) {
                 map.panTo([myP.lat, myP.lon], { animate: false }); 
                 const percent = (me.idx / (gpxPoints.length - 1)) * 100;
@@ -1525,12 +1544,16 @@
                     statusText = `<span class="text-red-600 font-bold">Goal! ${r.finishTime}</span>`;
                 } else {
                     const distKm = gpxPoints[Math.floor(r.idx)] ? (gpxPoints[Math.floor(r.idx)].totalDist / 1000).toFixed(1) : "0.0";
-                    const stateIcon = r.state === 'stop' ? "☕" : "🏃";
+                    const stateIcon = r.state === 'stop' ? "&" : "<ﾘﾃﾟ";
                     statusText = `${distKm}km ${stateIcon}`;
                 }
-                const style = r.id === 0 ? "font-weight:bold; color:#2563eb;" : "color:#444;";
+                // 追随中のランナーを強調表示
+                const style = r.id === followedRunnerId ? "font-weight:bold; color:#2563eb; background-color: rgba(37, 99, 235, 0.1);" : "color:#444; cursor:pointer;";
+                // クリックで追随切り替え
+                const onClick = `onclick="changeFollowedRunner(${r.id})"`;
+                
                 html += `
-                <div style="${style} display:flex; justify-content:space-between; align-items:center;">
+                <div ${onClick} style="${style} display:flex; justify-content:space-between; align-items:center; padding: 2px 4px; border-radius: 4px;">
                     <span>${i+1}. <span style="color:${r.color}">●</span> ${r.name}</span>
                     <span style="font-size:10px; margin-left:8px;">${statusText}</span>
                 </div>`;
@@ -1540,8 +1563,10 @@
         }
 
         function checkAndShowComment() {
-            const me = runners[0];
+            // 追随対象のランナーを取得
+            const me = runners.find(r => r.id === followedRunnerId) || runners[0];
             const currentP = gpxPoints[Math.floor(me.idx)];
+            
             if (!currentP) return;
             courseComments.forEach((c) => {
                 const dist = map.distance([currentP.lat, currentP.lon], [c.lat, c.lon]);
