@@ -464,13 +464,13 @@
         // 文字化け対策のため、日本語文字列をUnicodeエスケープシーケンスに変換
         const RUNNER_CONFIGS = [
             { name: "\u3051\u3093\u3061\u3083\u3093", color: "#3b82f6", fileName: "\u3051\u3093\u3061\u3083\u3093.png", fallbackText: "Ken", type: "start_dash", restMin: 30, restMax: 90 }, // けんちゃん
-            { name: "\u30d0\u30bf\u30b3\u3055\u3093", color: "#f97316", fileName: "\u30d0\u30bf\u30b3\u3055\u3093.png", fallbackText: "Bat", type: "even", restMin: 120, restMax: 300 }, // バタコさん
-            { name: "\u3055\u3068\u3068\u3082\u3055\u3093", color: "#dc2626", fileName: "\u3055\u3068\u3068\u3082\u3055\u3093.png", fallbackText: "Sato", type: "even", restMin: 90, restMax: 300 }, // さとともさん
+            { name: "\u30d0\u30bf\u30b3\u3055\u3093", color: "#f97316", fileName: "\u30d0\u30bf\u30b3\u3055\u3093.png", fallbackText: "Bat", type: "even", restMin: 20, restMax: 30 }, // バタコさん
+            { name: "\u3055\u3068\u3068\u3082\u3055\u3093", color: "#dc2626", fileName: "\u3055\u3068\u3068\u3082\u3055\u3093.png", fallbackText: "Sato", type: "even", restMin: 5, restMax: 200 }, // さとともさん
             { name: "\u308a\u3087\u3046\u3053\u3055\u3093", color: "#ec4899", fileName: "\u308a\u3087\u3046\u3053\u3055\u3093.png", fallbackText: "Ryo", type: "negative_split", restMin: 60, restMax: 180 }, // りょうこさん
             { name: "\u3076\u30fc\u3061\u3093", color: "#22c55e", fileName: "\u3076\u30fc\u3061\u3093.png", fallbackText: "Boo", type: "start_dash", restMin: 45, restMax: 120 }, // ぶーちん
             { name: "\u3084\u3063\u3061", color: "#a855f7", fileName: "\u3084\u3063\u3061.png", fallbackText: "Yat", type: "negative_split", restMin: 60, restMax: 240 }, // やっち
             { name: "\u3058\u3085\u3093", color: "#06b6d4", fileName: "\u3058\u3085\u3093.png", fallbackText: "Jun", type: "even", restMin: 60, restMax: 180 }, // じゅん
-            { name: "\u3061\u3083\u306d", color: "#eab308", fileName: "\u3061\u3083\u306d.png", fallbackText: "Cha", type: "negative_split", restMin: 30, restMax: 120 } // ちゃね
+            { name: "\u3061\u3083\u306d", color: "#eab308", fileName: "\u3061\u3083\u306d.png", fallbackText: "Cha", type: "negative_split", restMin: 30, restMax: 600 } // ちゃね
         ];
         let runners = []; 
         let aidStationIndices = []; 
@@ -852,7 +852,6 @@
                 btn.classList.add('bg-purple-600', 'border-purple-800');
                 btn.textContent = "AI ON";
                 box.style.display = "flex";
-                
                 if (isPlaying) startAiCommentaryLoop();
             } else {
                 btn.classList.remove('bg-purple-600', 'border-purple-800');
@@ -957,37 +956,45 @@
             `;
 
             let commentary = "";
-            if (!apiKey) {
-                // ダミーコメント (APIキーがない場合用)
+            let apiSuccess = false;
+
+            // APIキーがある場合はコールを試みる
+            if (apiKey) {
+                try {
+                    const result = await callGemini(prompt);
+                    // エラーメッセージが返ってきた場合や通信エラーの場合は失敗とみなす
+                    if (!result.includes("通信エラー") && !result.includes("失敗")) {
+                        commentary = result;
+                        apiSuccess = true;
+                    }
+                } catch (e) {
+                    console.warn("AI実況生成エラー:", e);
+                    // 失敗時はダミーへフォールバック
+                }
+            }
+
+            // APIキーがない、またはAPIコールに失敗した場合はダミー実況を使用
+            if (!apiSuccess) {
                 if (recentEvents) {
                     commentary = `\u304a\u3063\u3068\uff01${recentEvents} \u5c55\u958b\u304c\u52d5\u3044\u3066\u3044\u307e\u3059\uff01`;
                 } else {
                     const phrases = [
-                        // 既存
                         "\u3055\u3042\u3001\u30ec\u30fc\u30b9\u306f\u4e2d\u76e4\u6226\uff01\u5404\u30e9\u30f3\u30ca\u30fc\u61f8\u547d\u306a\u8d70\u308a\u3092\u898b\u305b\u3066\u3044\u307e\u3059\uff01",
                         "\u7f8e\u3057\u3044\u4f0a\u8c46\u306e\u5c71\u3005\u3092\u30e9\u30f3\u30ca\u30fc\u305f\u3061\u304c\u99c6\u3051\u629c\u3051\u3066\u3044\u304d\u307e\u3059\uff01",
                         "\u9811\u5f35\u308c\uff01\u30b4\u30fc\u30eb\u306f\u3082\u3046\u3059\u3050\u3060\uff01\u30e9\u30b9\u30c8\u30b9\u30d1\u30fc\u30c8\uff01",
-                        
-                        // 追加バリエーション
-                        "\u3053\u306e\u6025\u306a\u4e0a\u308a\u5742\u3001\u8ab0\u304c\u5236\u3059\u308b\u306e\u304b\uff01\uff1f", // この急な上り坂、誰が制するのか！？
-                        "\u4e0b\u308a\u5742\u3067\u306e\u30b9\u30d4\u30fc\u30c9\u52dd\u8ca0\uff01\u8ee2\u5012\u306b\u6c17\u3092\u3064\u3051\u3066\uff01", // 下り坂でのスピード勝負！転倒に気をつけて！
-                        "\u30a8\u30a4\u30c9\u30b9\u30c6\u30fc\u30b7\u30e7\u30f3\u3067\u306e\u88dc\u7d66\u304c\u52dd\u8ca0\u306e\u9375\u3092\u63e1\u308a\u307e\u3059\uff01", // エイドステーションでの補給が勝負の鍵を握ります！
-                        "\u7d76\u666f\u306e\u7a1c\u7dda\u30c8\u30ec\u30a4\u30eb\uff01\u6c17\u6301\u3061\u3088\u3051\u308c\u3070\u6700\u9ad8\u3067\u3059\u306d\uff01", // 絶景の稜線トレイル！気持ちよければ最高ですね！
-                        "\u30c8\u30c3\u30d7\u4e89\u3044\u304c\u6fc0\u5316\u3057\u3066\u304d\u307e\u3057\u305f\uff01\u76ee\u304c\u96e2\u305b\u307e\u305b\u3093\uff01", // トップ争いが激化してきました！目が離せません！
-                        "\u75b2\u308c\u304c\u898b\u3048\u59cb\u3081\u308b\u6642\u9593\u5e2f\u3001\u3053\u3053\u304c\u8e0f\u3093\u5f35\u308a\u3069\u3053\u308d\u3067\u3059\uff01", // 疲れが見え始める時間帯、ここが踏ん張りどころです！
-                        "\u89b3\u5ba2\u306e\u58f0\u634f\u304c\u30e9\u30f3\u30ca\u30fc\u306e\u529b\u306b\u306a\u308a\u307e\u3059\uff01\u30ca\u30a4\u30b9\u30e9\u30f3\uff01", // 観客の声援がランナーの力になります！ナイスラン！
-                        "\u4e00\u6b69\u4e00\u6b69\u3001\u78ba\u5b9f\u306b\u30b4\u30fc\u30eb\u3078\u8fd1\u3065\u3044\u3066\u3044\u307e\u3059\u3002", // 一歩一歩、確実にゴールへ近づいています。
-                        "\u7d20\u6674\u3089\u3057\u3044\u8d70\u308a\u3067\u3059\uff01\u611f\u52d5\u3092\u3042\u308a\u304c\u3068\u3046\uff01", // 素晴らしい走りです！感動をありがとう！
-                        "\u53e4\u9053\u306e\u96f0\u56f2\u6c17\u3092\u611f\u3058\u306a\u304c\u3089\u3001\u30e9\u30f3\u30ca\u30fc\u305f\u3061\u304c\u9032\u307f\u307e\u3059\u3002", // 古道の雰囲気を感じながら、ランナーたちが進みます。
-                        "\u3055\u3042\u3001\u81ea\u5206\u3068\u306e\u6226\u3044\u3060\uff01\u8ca0\u3051\u308b\u306a\uff01" // さあ、自分との戦いだ！負けるな！
+                        "\u3053\u306e\u6025\u306a\u4e0a\u308a\u5742\u3001\u8ab0\u304c\u5236\u3059\u308b\u306e\u304b\uff01\uff1f",
+                        "\u4e0b\u308a\u5742\u3067\u306e\u30b9\u30d4\u30fc\u30c9\u52dd\u8ca0\uff01\u8ee2\u5012\u306b\u6c17\u3092\u3064\u3051\u3066\uff01",
+                        "\u30a8\u30a4\u30c9\u30b9\u30c6\u30fc\u30b7\u30e7\u30f3\u3067\u306e\u88dc\u7d66\u304c\u52dd\u8ca0\u306e\u9375\u3092\u63e1\u308a\u307e\u3059\uff01",
+                        "\u7d76\u666f\u306e\u7a1c\u7dda\u30c8\u30ec\u30a4\u30eb\uff01\u6c17\u6301\u3061\u3088\u3051\u308c\u3070\u6700\u9ad8\u3067\u3059\u306d\uff01",
+                        "\u30c8\u30c3\u30d7\u4e89\u3044\u304c\u6fc0\u5316\u3057\u3066\u304d\u307e\u3057\u305f\uff01\u76ee\u304c\u96e2\u305b\u307e\u305b\u3093\uff01",
+                        "\u75b2\u308c\u304c\u898b\u3048\u59cb\u3081\u308b\u6642\u9593\u5e2f\u3001\u3053\u3053\u304c\u8e0f\u3093\u5f35\u308a\u3069\u3053\u308d\u3067\u3059\uff01",
+                        "\u89b3\u5ba2\u306e\u58f0\u634f\u304c\u30e9\u30f3\u30ca\u30fc\u306e\u529b\u306b\u306a\u308a\u307e\u3059\uff01\u30ca\u30a4\u30b9\u30e9\u30f3\uff01",
+                        "\u4e00\u6b69\u4e00\u6b69\u3001\u78ba\u5b9f\u306b\u30b4\u30fc\u30eb\u3078\u8fd1\u3065\u3044\u3066\u3044\u307e\u3059\u3002",
+                        "\u7d20\u6674\u3089\u3057\u3044\u8d70\u308a\u3067\u3059\uff01\u611f\u52d5\u3092\u3042\u308a\u304c\u3068\u3046\uff01",
+                        "\u53e4\u9053\u306e\u96f0\u56f2\u6c17\u3092\u611f\u3058\u306a\u304c\u3089\u3001\u30e9\u30f3\u30ca\u30fc\u305f\u3061\u304c\u9032\u307f\u307e\u3059\u3002",
+                        "\u3055\u3042\u3001\u81ea\u5206\u3068\u306e\u6226\u3044\u3060\uff01\u8ca0\u3051\u308b\u306a\uff01"
                     ];
                     commentary = phrases[Math.floor(Math.random() * phrases.length)];
-                }
-            } else {
-                try {
-                    commentary = await callGemini(prompt);
-                } catch (e) {
-                    commentary = "AI実況の生成に失敗しました。";
                 }
             }
 
@@ -1520,6 +1527,8 @@
         }
 
         function updatePlayerUI() {
+            if (!runners || runners.length === 0) return; // ガード追加
+
             runners.forEach(r => {
                 const i = Math.floor(r.idx);
                 const p = gpxPoints[i];
@@ -1534,6 +1543,9 @@
 
             // 追随対象のランナーを取得 (見つからなければ先頭のランナー)
             const me = runners.find(r => r.id === followedRunnerId) || runners[0];
+            
+            if (!me) return; // ガード追加
+
             const myP = gpxPoints[Math.floor(me.idx)];
             
             if (myP) {
@@ -1585,7 +1597,9 @@
                 if (prevRank !== undefined && currentRank < prevRank) {
                     // 順位が上がった
                     const overtaken = sortedRunners[currentRank + 1]; // 抜かれた人（たぶん）
-                    if (overtaken) {
+                    
+                    // 頻度調整：追い抜き実況は毎回だと多すぎるので、30%程度の確率でピックアップする
+                    if (overtaken && Math.random() < 0.3) {
                         raceEvents.push(`【追い抜き】${r.name}が${overtaken.name}を追い抜きました！`);
                     }
                 }
