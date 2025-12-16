@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPXルートビューア (ITJ) v3 - Result Replay</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700&family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #f3f4f6;
+            overflow: hidden; /* スクロール防止 */
+        }
+        #map {
+            z-index: 1;
+            background-color: #222;
+        }
+        
+        /* --- 高低図エリア（左上・反透過） --- */
+        #elevationChartContainer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 300px;
+            max-width: 40%; /* スマホ対応 */
+            height: 80px;
+            background: rgba(255, 255, 255, 0.6); /* 反透過 */
+            border-radius: 8px;
+            z-index: 1000;
+            padding: 5px 5px 15px 5px; /* 下に少し余白 */
+            backdrop-filter: blur(2px);
+            pointer-events: none; /* 地図操作の邪魔にならないように */
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        /* --- コントロールパネル（下部・コンパクト） --- */
+        .player-controls {
+            position: absolute;
+            bottom: 30px; /* 少し下げる */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            width: auto; 
+            min-width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 6px 16px;
+            border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            transition: bottom 0.3s;
+        }
+
+        /* 凡例 */
+        .legend {
+            background: white;
+            padding: 6px;
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+            font-size: 10px;
+            line-height: 1.4;
+            color: #333;
+        }
+        .legend i {
+            width: 12px;
+            height: 12px;
+            float: left;
+            margin-right: 4px;
+            opacity: 0.8;
+            border-radius: 2px;
+        }
+        .comment-popup .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        }
+        .comment-popup .leaflet-popup-content {
+            margin: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        /* スライダーのカスタマイズ */
+        input[type=range] {
+            height: 4px;
+            border-radius: 2px;
+            background: #cbd5e1;
+            outline: none;
+            -webkit-appearance: none;
+            flex-grow: 1; /* 横幅いっぱいに */
+            cursor: pointer;
+            width: 120px; /* 幅を固定してコンパクトに */
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            margin-top: -5px;
+        }
+        
+        /* カスタムアイコン画像用スタイル */
+        .custom-runner-icon {
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            background: white;
+            object-fit: cover;
+            cursor: pointer; /* クリック可能であることを示す */
+            transition: transform 0.1s;
+        }
+        .custom-runner-icon:hover {
+            transform: scale(1.1);
+            z-index: 1000 !important;
+        }
+        
+        /* 応援吹き出し */
+        .cheer-popup .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #ef4444;
+            border-radius: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .cheer-popup .leaflet-popup-tip {
+            background: #ef4444;
+        }
+
+        /* 順位表示・タイム表示などのオーバーレイ */
+        #raceStatus {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 6px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 1000;
+            backdrop-filter: blur(2px);
+            display: none; /* GPXロード後に表示 */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-width: 140px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* --- ニコニコ風コメントオーバーレイ --- */
+        #nicoOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 80%; /* 下部のコントロールに被らないように */
+            pointer-events: none; /* クリックを透過 */
+            z-index: 2500; /* UIより上、モーダルより下 */
+            overflow: hidden;
+        }
+
+        .nico-comment {
+            position: absolute;
+            white-space: nowrap;
+            color: #fff;
+            font-size: 24px;
+            font-weight: 900;
+            font-family: 'Noto Sans JP', sans-serif;
+            text-shadow: 
+                2px 2px 0 #000, -1px -1px 0 #000,  
+                1px -1px 0 #000, -1px 1px 0 #000,
+                1px 1px 0 #000;
+            left: 100%;
+            will-change: transform;
+            animation-timing-function: linear;
+            animation-fill-mode: forwards;
+        }
+
+        @keyframes nicoScroll {
+            from { transform: translateX(0); }
+            to { transform: translateX(calc(-100vw - 100%)); } /* 画面幅分 + 自要素分を移動 */
+        }
+
+        /* モーダル共通 */
+        .modal-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 3000; 
+            display: none;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 320px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        /* リザルト画面専用スタイル */
+        #resultModal .modal-content {
+            max-width: 480px;
+            background: linear-gradient(to bottom right, #ffffff, #f0f9ff);
+        }
+        .podium-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 8px;
+            margin: 20px 0;
+            height: 160px;
+        }
+        .podium-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+        .podium-rank {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 4px;
+            text-shadow: 1px 1px 0 #fff;
+        }
+        .podium-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            z-index: 10;
+            background: white;
+            object-fit: cover;
+            margin-bottom: -15px; /* 台座にめり込ませる */
+        }
+        .podium-base {
+            width: 70px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding-bottom: 8px;
+            color: white;
+            font-weight: bold;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        /* 1位 */
+        .rank-1 .podium-icon { width: 80px; height: 80px; border-color: #fbbf24; }
+        .rank-1 .podium-base { height: 100px; background: linear-gradient(to bottom, #fbbf24, #d97706); }
+        .rank-1 .podium-rank { color: #d97706; font-size: 1.5em; }
+        /* 2位 */
+        .rank-2 .podium-base { height: 70px; background: linear-gradient(to bottom, #9ca3af, #4b5563); }
+        .rank-2 .podium-rank { color: #4b5563; }
+        /* 3位 */
+        .rank-3 .podium-base { height: 50px; background: linear-gradient(to bottom, #fdba74, #c2410c); }
+        .rank-3 .podium-rank { color: #c2410c; }
+
+        .result-list {
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+            border-top: 1px solid #eee;
+        }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+    </style>
+</head>
+<body class="h-screen w-full flex flex-col overflow-hidden">
+
+    <!-- 地図表示エリア -->
+    <div id="map" class="w-full h-full absolute inset-0"></div>
+    
+    <!-- ニコニコ風コメントオーバーレイ -->
+    <div id="nicoOverlay"></div>
+
+    <!-- 順位・タイム表示 -->
+    <div id="raceStatus">
+        <div id="raceTimer" class="text-xl font-bold text-center mb-1 font-mono text-gray-800 bg-gray-100 rounded py-1">00:00:00</div>
+        <div id="leaderboardContent"></div>
+    </div>
+    
+    <!-- 高低図エリア（左上・反透過） -->
+    <div id="elevationChartContainer">
+        <svg id="elevationSvg" viewBox="0 0 100 100" preserveAspectRatio="none" class="overflow-visible w-full h-full">
+            <defs>
+                <linearGradient id="elevationGradient" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.8"/>
+                    <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.2"/>
+                </linearGradient>
+            </defs>
+            <path id="elevationPath" d="" fill="url(#elevationGradient)" stroke="#2563eb" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+            <!-- 自分の位置マーカー -->
+            <circle id="elevationMarker" r="4" fill="#fbbf24" stroke="#fff" stroke-width="1.5" cx="0" cy="0" style="display:none;" vector-effect="non-scaling-stroke"></circle>
+        </svg>
+        <div id="currentEleDisplay" class="absolute top-1 right-1 text-[10px] font-bold text-blue-800 bg-white/70 px-1 rounded"></div>
+    </div>
+
+    <!-- 再生コントロールパネル（下部・コンパクト） -->
+    <!-- IDを追加: playerControls -->
+    <div id="playerControls" class="player-controls">
+        <!-- 再生ボタン -->
+        <button onclick="togglePlay()" id="playBtn" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full shadow transition flex-shrink-0">
+            <svg id="icon-play" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <svg id="icon-pause" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        </button>
+
+        <!-- スライダー -->
+        <input type="range" id="progressSlider" min="0" max="100" value="0" oninput="seekAnimation(this.value)">
+        
+        <!-- 距離情報 (自分の距離を表示) -->
+        <div class="flex flex-col items-end text-[10px] leading-tight text-gray-600 w-16 flex-shrink-0">
+            <span id="currentDistDisplay" class="font-bold text-blue-600">0.0km</span>
+            <span id="totalDistDisplay" class="text-gray-400">/ 0.0km</span>
+        </div>
+
+        <!-- 速度ボタン -->
+        <button onclick="changeSpeed()" id="speedBtn" class="text-[10px] font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded hover:bg-gray-200 w-8 text-center flex-shrink-0 transition">x5.0</button>
+
+        <!-- リセットボタン -->
+        <button onclick="resetAnimation()" class="text-gray-400 hover:text-gray-600 flex-shrink-0" title="リセット">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+        </button>
+    </div>
+    
+    <!-- 右下ボタン群（下揃え・横並び） -->
+    <!-- IDを追加: bottomRightControls -->
+    <div id="bottomRightControls" class="absolute bottom-12 right-4 z-[900] flex flex-row gap-3">
+        <!-- AI実況ON/OFFボタン -->
+        <button onclick="toggleAiCommentary()" id="btnAiToggle" class="bg-purple-600 text-white p-2.5 rounded-full shadow-lg hover:bg-purple-700 transition border border-purple-800 flex items-center justify-center font-bold text-xs" title="実況 ON/OFF">
+            &#x2728; 実況
+        </button>
+
+        <!-- GPX読込ボタン -->
+        <label class="cursor-pointer bg-white text-gray-700 p-2.5 rounded-full shadow-lg hover:bg-gray-100 transition border border-gray-200 flex items-center justify-center" title="GPXファイルを読み込む">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <input type="file" accept=".gpx" class="hidden" onchange="handleFileSelect(event)">
+        </label>
+
+        <!-- 全体表示ボタン -->
+        <button onclick="fitBoundsToTrack()" class="bg-white text-gray-700 p-2.5 rounded-full shadow-lg hover:bg-gray-100 transition border border-gray-200" title="ルート全体を表示">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- リザルトモーダル -->
+    <div id="resultModal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 class="text-2xl font-bold mb-2 text-gray-800">&#x1F3C6; Race Results &#x1F3C6;</h2>
+            <div class="text-sm text-gray-500 mb-4">全員ゴールしました！お疲れ様でした！</div>
+            
+            <!-- 表彰台エリア -->
+            <div id="podiumArea" class="podium-container">
+                <!-- JSで生成 -->
+            </div>
+
+            <!-- 全員の結果リスト -->
+            <div id="resultListArea" class="result-list">
+                <!-- JSで生成 -->
+            </div>
+
+            <div class="mt-5 flex justify-center gap-4">
+                <button onclick="closeResultModal()" class="bg-gray-200 text-gray-700 py-2 px-4 rounded hover:bg-gray-300 transition">閉じる</button>
+                <button onclick="resetAnimation(); closeResultModal();" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition">もう一度走る</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+
+    <script>
+        // ==========================================
+        //  設定
+        // ==========================================
+        const GPX_FILE_URL = 'ITJ_course_2025.gpx'; 
+        const REVERSE_GPX_ORDER = true; 
+        
+        // APIキーの設定
+        const apiKey = ""; 
+
+        // アニメーション設定
+        let PLAY_SPEED = 5.0; // デフォルトを5倍速(旧1.7の約3倍)に設定
+        const SPEED_OPTIONS = [1, 2, 5, 10, 20, 50, 100]; 
+        const FRAME_DURATION = 1; // 秒更新
+
+        // 基準開始時刻
+        const BASE_TIME_STR = "06:00:00";
+
+        // ==========================================
+        //  ランナー実績データ
+        // ==========================================
+        const RUNNER_CONFIGS = [
+            { 
+                name: "\u3061\u3083\u306d", color: "#eab308", fileName: "\u3061\u3083\u306d.png", fallbackText: "Cha", 
+                times: ["6:00:41", "7:08:07", "9:07:20", "12:17:37", "14:36:29", "16:59:46"] 
+            },
+            { 
+                name: "\u308a\u3087\u3046\u3053\u3055\u3093", color: "#ec4899", fileName: "\u308a\u3087\u3046\u3053\u3055\u3093.png", fallbackText: "Ryo", 
+                times: ["6:02:49", "7:33:15", "10:03:42", "13:38:44", "16:03:43", "18:51:44"] 
+            },
+            { 
+                name: "\u3051\u3093\u3061\u3083\u3093", color: "#3b82f6", fileName: "\u3051\u3093\u3061\u3083\u3093.png", fallbackText: "Ken", 
+                times: ["6:02:53", "7:43:45", "10:22:30", "14:01:07", "16:36:39", "19:33:01"] 
+            },
+            { 
+                name: "\u3084\u3063\u3061", color: "#a855f7", fileName: "\u3084\u3063\u3061.png", fallbackText: "Yat", 
+                times: ["6:00:39", "7:09:28", "9:19:07", "12:31:27", "14:59:48", "17:45:33"] 
+            },
+            { 
+                name: "\u3058\u3085\u3093", color: "#06b6d4", fileName: "\u3058\u3085\u3093.png", fallbackText: "Jun", 
+                times: ["6:02:49", "7:32:35", "10:00:00", "13:31:01", "16:12:50", "19:02:25"] 
+            },
+            { 
+                name: "\u3076\u30fc\u3061\u3093", color: "#22c55e", fileName: "\u3076\u30fc\u3061\u3093.png", fallbackText: "Boo", 
+                times: ["6:00:33", "7:08:00", "8:59:38", "11:49:34", "13:56:52", "16:11:39"] 
+            }
+        ];
+
+        let runners = []; 
+        let elapsedTime = 0; 
+        let followedRunnerId = 0; 
+        
+        let isAiCommentaryOn = true; 
+        let aiInterval = null;
+        let raceEvents = []; 
+        let lastRankMap = {}; 
+        
+        // キューは使用せず直接流す
+        let commentaryQueue = [];
+
+        let checkpointIndices = []; 
+
+        const CUSTOM_EVENTS = [
+            {
+                type: 'time',
+                seconds: 5,
+                text: "会場は冷たい雨！しかしランナーたちの熱気で湯気が立っております！さあ過酷な旅の始まりだ！",
+                fired: false
+            },
+            {
+                type: 'time',
+                seconds: 35, 
+                text: "【Start】Aブロックがスタート！ぶーちん、やっち、ちゃねが勢いよく飛び出しました！",
+                fired: false
+            },
+            {
+                type: 'time',
+                seconds: 170, 
+                text: "【Start】続いてBブロックもスタート！りょうこさん、けんちゃん、じゅんが前の集団を追います！",
+                fired: false
+            },
+            {
+                type: 'distance',
+                who: "\u3061\u3083\u306d", 
+                km: 11,
+                text: "おっと11km地点！ちゃねがぶーちんの背中を捉えた！『逃げ切れるかぶーちん、食らいつくかちゃね！』",
+                fired: false
+            },
+            {
+                type: 'distance',
+                who: "\u3058\u3085\u3093", 
+                km: 16,
+                text: "16km地点のシングルトラックで渋滞発生！りょうこ、じゅん、けんちゃんが仲良くおしくらまんじゅう状態です！",
+                fired: false
+            },
+            {
+                type: 'distance',
+                who: "\u3076\u30fc\u3061\u3093", 
+                km: 23,
+                text: "23km地点、なんと雷鳴が轟いています！雨も強まってきた！ぶーちん、ここは修行の場と化したか！？",
+                fired: false
+            },
+            {
+                type: 'location',
+                who: "\u3061\u3083\u306d", 
+                keyword: "仁科エイド", 
+                text: "仁科エイドから衝撃の情報！ちゃね選手、なんと塩カツオうどん13玉を完食！走る胃袋、恐るべし！！",
+                fired: false
+            },
+            {
+                type: 'distance',
+                who: "\u3084\u3063\u3061", 
+                km: 35,
+                text: "35km地点、やっちが猫越岳への登りに挑む！ここはもはや田んぼ！泥んこ遊びの延長戦突入だー！",
+                fired: false
+            },
+            {
+                type: 'location',
+                who: "\u308a\u3087\u3046\u3053\u3055\u3093", 
+                keyword: "達磨山", 
+                text: "だるま山山頂！りょうこさんが足を止めて...なんと記念撮影中！余裕のピースサインが出ました！",
+                fired: false
+            },
+            {
+                type: 'distance',
+                who: "\u3051\u3093\u3061\u3083\u3093", 
+                km: 55,
+                text: "55km地点、けんちゃんがストップ！なんと女性ランナーの落とした携帯を一緒に探しています！紳士だ！ITJの紳士がここにいた！",
+                fired: false
+            },
+            {
+                type: 'distance',
+                who: "\u3076\u30fc\u3061\u3093", 
+                km: 60,
+                text: "60km地点、だるま山レストハウスをぶーちんが通過！この期に及んでまだ走っている！この男の辞書に『歩く』という文字はないのか！",
+                fired: false
+            }
+        ];
+
+        const courseComments = [
+            { lat: 34.7622, lon: 138.7757, text: "スタート：松崎港" },
+            { lat: 34.78945, lon: 138.83531, text: "宝蔵院" },
+            { lat: 34.7841, lon: 138.8448, text: "八瀬峠" },
+            { lat: 34.8098, lon: 138.8808, text: "諸坪峠" },
+            { lat: 34.81527, lon: 138.89888, text: "こがね橋エイド" },
+            { lat: 34.82977, lon: 138.90792, text: "二本杉峠" },
+            { lat: 34.86169, lon: 138.84546, text: "仁科展望台" },
+            { lat: 34.87064, lon: 138.84383, text: "仁科エイド" },
+            { lat: 34.93452, lon: 138.83172, text: "土肥駐車場エイド" },
+            { lat: 34.95498, lon: 138.83926, text: "達磨山" },
+            { lat: 34.96425, lon: 138.83842, text: "小達磨山" },
+            { lat: 34.97038, lon: 138.92860, text: "ゴール：修善寺" }
+        ];
+
+        // 休憩させる場所（チェックポイントのインデックスで指定）
+        // 0: Start, 1: 宝蔵院, 2: 八瀬峠, 3: 諸坪峠, 4: こがね橋(Aid), 5: 二本杉, 6: 仁科展望, 7: 仁科(Aid), 8: 土肥(Aid), ...
+        // インデックスは identifyAidStations で動的に割り当てられるが、
+        // CHECKPOINT_KEYWORDS に基づく
+        const CHECKPOINT_KEYWORDS = [
+            "スタート", 
+            "宝蔵院",   // index 1
+            "こがね橋", // index 2 (エイド)
+            "仁科エイド", // index 3 (エイド)
+            "土肥駐車場", // index 4 (エイド)
+            "ゴール"     // index 5
+        ];
+        
+        // 各チェックポイントでの休憩時間設定 (秒)
+        // 実際の通過タイムから逆算して、この時間分だけ手前で足止めする
+        const CHECKPOINT_REST_DURATIONS = {
+            2: 300, // こがね橋: 5分
+            3: 600, // 仁科エイド: 10分
+            4: 600  // 土肥駐車場: 10分
+        };
+
+        const sampleGpxLines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<gpx version="1.1" creator="Sample" xmlns="http://www.topografix.com/GPX/1/1">',
+            '  <trk>',
+            '    <name>ITJ Sample</name>',
+            '    <trkseg>',
+            '      <trkpt lat="34.7540" lon="138.7760"><ele>5</ele></trkpt>',
+            '      <trkpt lat="34.7600" lon="138.7850"><ele>50</ele></trkpt>',
+            '      <trkpt lat="34.7650" lon="138.7950"><ele>100</ele></trkpt>',
+            '      <trkpt lat="34.7700" lon="138.8100"><ele>400</ele></trkpt>',
+            '      <trkpt lat="34.7750" lon="138.8200"><ele>550</ele></trkpt>',
+            '      <trkpt lat="34.7850" lon="138.8300"><ele>700</ele></trkpt>',
+            '      <trkpt lat="34.7900" lon="138.8400"><ele>600</ele></trkpt>',
+            '      <trkpt lat="34.8000" lon="138.8500"><ele>500</ele></trkpt>',
+            '      <trkpt lat="34.8100" lon="138.8600"><ele>700</ele></trkpt>',
+            '      <trkpt lat="34.8200" lon="138.8700"><ele>900</ele></trkpt>',
+            '      <trkpt lat="34.8300" lon="138.8800"><ele>880</ele></trkpt>',
+            '      <trkpt lat="34.8400" lon="138.8900"><ele>850</ele></trkpt>',
+            '      <trkpt lat="34.8500" lon="138.9000"><ele>920</ele></trkpt>',
+            '      <trkpt lat="34.8600" lon="138.9100"><ele>1000</ele></trkpt>',
+            '      <trkpt lat="34.8700" lon="138.9150"><ele>980</ele></trkpt>',
+            '      <trkpt lat="34.8800" lon="138.9200"><ele>950</ele></trkpt>',
+            '      <trkpt lat="34.8900" lon="138.9250"><ele>880</ele></trkpt>',
+            '      <trkpt lat="34.9000" lon="138.9300"><ele>800</ele></trkpt>',
+            '      <trkpt lat="34.9100" lon="138.9350"><ele>850</ele></trkpt>',
+            '      <trkpt lat="34.9200" lon="138.9380"><ele>950</ele></trkpt>',
+            '      <trkpt lat="34.9300" lon="138.9400"><ele>980</ele></trkpt>',
+            '      <trkpt lat="34.9380" lon="138.9430"><ele>900</ele></trkpt>',
+            '      <trkpt lat="34.9500" lon="138.9500"><ele>600</ele></trkpt>',
+            '      <trkpt lat="34.9600" lon="138.9600"><ele>300</ele></trkpt>',
+            '      <trkpt lat="34.9720" lon="138.9660"><ele>50</ele></trkpt>',
+            '    </trkseg>',
+            '  </trk>',
+            '</gpx>'
+        ];
+        const sampleGpxData = sampleGpxLines.join("\n");
+
+        let map;
+        let currentTrackLayer = null;
+        let commentLayer = null;
+        let isZenMode = false;
+        let gpxPoints = []; 
+        let routeTotalDistance = 0;
+        let minEle = 0, maxEle = 0; 
+        
+        let isPlaying = false;
+        let animReqId = null;
+
+        // --- Helper ---
+        function timeStrDiff(timeStr) {
+            const [baseH, baseM, baseS] = BASE_TIME_STR.split(':').map(Number);
+            const baseSec = baseH * 3600 + baseM * 60 + baseS;
+            const [targetH, targetM, targetS] = timeStr.split(':').map(Number);
+            const targetSec = targetH * 3600 + targetM * 60 + targetS;
+            return targetSec - baseSec;
+        }
+
+        function formatElapsedTime(elapsedSec) {
+            const [baseH, baseM, baseS] = BASE_TIME_STR.split(':').map(Number);
+            let totalSec = (baseH * 3600 + baseM * 60 + baseS) + elapsedSec;
+            const h = Math.floor(totalSec / 3600);
+            totalSec %= 3600;
+            const m = Math.floor(totalSec / 60);
+            const s = Math.floor(totalSec % 60);
+            return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        // --- Global Funcs ---
+        window.handleFileSelect = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) { processGPX(e.target.result); };
+            reader.readAsText(file);
+        };
+
+        window.changeFollowedRunner = function(id) {
+            followedRunnerId = id;
+            updateLeaderboard();
+            updatePlayerUI();
+        };
+
+        function getIconUrl(config) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(config.fileName);
+                img.onerror = () => {
+                    const fallbackUrl = `https://placehold.co/40x40/${config.color.substring(1)}/ffffff?text=${config.fallbackText}`;
+                    resolve(fallbackUrl);
+                };
+                img.src = config.fileName;
+            });
+        }
+
+        // --- Nico Nico Style Comment Spawner ---
+        function spawnNicoComment(text) {
+            const overlay = document.getElementById('nicoOverlay');
+            const comment = document.createElement('div');
+            comment.className = 'nico-comment';
+            comment.textContent = text;
+            
+            // Randomize vertical position (top 10% to 70% to avoid covering controls)
+            const topPercent = 10 + Math.random() * 60;
+            comment.style.top = topPercent + '%';
+            
+            // Randomize animation duration slightly for variation (8s to 12s)
+            const duration = 8 + Math.random() * 4;
+            comment.style.animationName = 'nicoScroll';
+            comment.style.animationDuration = duration + 's';
+
+            overlay.appendChild(comment);
+
+            // Remove element after animation finishes
+            comment.addEventListener('animationend', () => {
+                comment.remove();
+            });
+        }
+
+        // --- Modals ---
+        window.openCheerModal = function() {
+            const modal = document.getElementById('cheerModal');
+            const list = document.getElementById('cheerRunnerList');
+            list.innerHTML = '';
+            runners.forEach((r, i) => {
+                if (r.finished) return;
+                const btn = document.createElement('button');
+                btn.className = "w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold py-3 px-4 rounded border border-blue-200 flex items-center justify-between";
+                btn.onclick = () => applyCheer(i);
+                const iconHtml = `<img src="${r.marker.options.icon.options.iconUrl}" class="w-8 h-8 rounded-full border border-gray-300 bg-white object-cover">`;
+                btn.innerHTML = `<div class="flex items-center gap-3">${iconHtml}<span>${r.name}</span></div><span class="text-xs bg-yellow-400 text-white px-2 py-1 rounded-full">エールを送る!</span>`;
+                list.appendChild(btn);
+            });
+            if (list.children.length === 0) list.innerHTML = '<div class="text-gray-500 py-4">応援できるランナーがいません</div>';
+            modal.style.display = 'flex';
+        };
+
+        window.closeCheerModal = function() { document.getElementById('cheerModal').style.display = 'none'; };
+
+        window.applyCheer = function(runnerIdx) {
+            const r = runners[runnerIdx];
+            if (!r) return;
+            // Nico comment for cheer
+            spawnNicoComment(`【応援】${r.name}に熱いエールが届きました！`);
+            
+            const p = gpxPoints[Math.floor(r.idx)];
+            if (p) {
+                const popup = L.popup({
+                    offset: [0, -40], autoClose: false, closeOnClick: false, closeButton: false,
+                    className: 'cheer-popup font-bold text-yellow-600'
+                }).setLatLng([p.lat, p.lon])
+                .setContent(`<div class="text-center animate-bounce">\u5fdc\u63f4\u3042\u308a\u304c\u3068\u30fc\uff01\uff01<br><span class="text-xs text-gray-500">to ${r.name}</span></div>`);
+                map.addLayer(popup);
+                setTimeout(() => map.removeLayer(popup), 2000);
+            }
+            closeCheerModal();
+        };
+
+        window.closeResultModal = function() { document.getElementById('resultModal').style.display = 'none'; };
+
+        window.showResultModal = function() {
+            const modal = document.getElementById('resultModal');
+            const podiumArea = document.getElementById('podiumArea');
+            const listArea = document.getElementById('resultListArea');
+            const sorted = [...runners].sort((a, b) => timeStrDiff(a.finishTime) - timeStrDiff(b.finishTime));
+            let podiumHTML = '';
+            const podiumOrder = [1, 0, 2];
+            podiumOrder.forEach(idx => {
+                if (!sorted[idx]) return;
+                const r = sorted[idx];
+                const rank = idx + 1;
+                podiumHTML += `
+                    <div class="podium-item rank-${rank}">
+                        <div class="podium-rank">${rank}</div>
+                        <img src="${r.marker.options.icon.options.iconUrl}" class="podium-icon">
+                        <div class="podium-base text-xs flex-col justify-end pb-2"><span>${r.name}</span></div>
+                    </div>`;
+            });
+            podiumArea.innerHTML = podiumHTML;
+            let listHTML = '';
+            sorted.forEach((r, i) => {
+                const rank = i + 1;
+                listHTML += `
+                    <div class="result-row">
+                        <div class="flex items-center gap-3"><span class="font-bold w-6 text-center text-gray-500">${rank}</span><img src="${r.marker.options.icon.options.iconUrl}" class="w-8 h-8 rounded-full border border-gray-200"><span class="font-medium text-gray-800">${r.name}</span></div>
+                        <div class="font-mono font-bold text-blue-600">${r.finishTime}</div>
+                    </div>`;
+            });
+            listArea.innerHTML = listHTML;
+            modal.style.display = 'flex';
+        };
+
+        window.fitBoundsToTrack = function() {
+            if (currentTrackLayer) {
+                const group = commentLayer ? L.featureGroup([currentTrackLayer, commentLayer]) : currentTrackLayer;
+                map.fitBounds(group.getBounds(), { padding: [20, 20] });
+            }
+        };
+
+        window.togglePlay = function() {
+            if (gpxPoints.length === 0) return;
+            isPlaying = !isPlaying;
+            const playIcon = document.getElementById('icon-play');
+            const pauseIcon = document.getElementById('icon-pause');
+            if (isPlaying) {
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+                startAiCommentaryLoop();
+                if (runners.every(r => r.finished)) {
+                    resetAnimation();
+                    isPlaying = true;
+                    playIcon.classList.add('hidden');
+                    pauseIcon.classList.remove('hidden');
+                    animLoop();
+                } else {
+                    animLoop();
+                }
+            } else {
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+                cancelAnimationFrame(animReqId);
+                stopAiCommentaryLoop();
+            }
+        };
+
+        window.resetAnimation = function() {
+            isPlaying = false;
+            cancelAnimationFrame(animReqId);
+            stopAiCommentaryLoop();
+            elapsedTime = 0;
+            raceEvents = [];
+            runners.forEach(r => { r.idx = 0; r.finished = false; r.lastCheckpointIdx = -1; r.finishEventEmitted = false; });
+            CUSTOM_EVENTS.forEach(e => e.fired = false);
+            // Clear Nico comments
+            document.getElementById('nicoOverlay').innerHTML = '';
+            
+            updatePlayerUI();
+            updateTimerDisplay();
+            document.getElementById('icon-play').classList.remove('hidden');
+            document.getElementById('icon-pause').classList.add('hidden');
+            map.closePopup();
+            if(gpxPoints.length > 0) map.panTo([gpxPoints[0].lat, gpxPoints[0].lon]);
+        };
+
+        window.seekAnimation = function(val) {
+            const ratio = parseInt(val) / 100;
+            const maxSeconds = 50000; 
+            elapsedTime = maxSeconds * ratio;
+            runners.forEach(r => { updateRunnerPosition(r); });
+            updatePlayerUI();
+            updateTimerDisplay();
+        };
+
+        window.changeSpeed = function() {
+            const currentIdx = SPEED_OPTIONS.indexOf(PLAY_SPEED);
+            const nextIdx = (currentIdx + 1) % SPEED_OPTIONS.length;
+            PLAY_SPEED = SPEED_OPTIONS[nextIdx];
+            document.getElementById('speedBtn').textContent = "x" + PLAY_SPEED;
+        };
+
+        window.toggleAiCommentary = function() {
+            isAiCommentaryOn = !isAiCommentaryOn;
+            const btn = document.getElementById('btnAiToggle');
+            // Remove box toggle since we use overlay now, but keep logic
+            if (isAiCommentaryOn) {
+                btn.classList.remove('bg-gray-400', 'border-gray-500');
+                btn.classList.add('bg-purple-600', 'border-purple-800');
+                btn.textContent = "AI ON";
+                if (isPlaying) startAiCommentaryLoop();
+            } else {
+                btn.classList.remove('bg-purple-600', 'border-purple-800');
+                btn.classList.add('bg-gray-400', 'border-gray-500');
+                btn.textContent = "AI OFF";
+                stopAiCommentaryLoop();
+            }
+        };
+
+        function startAiCommentaryLoop() {
+            if (!isAiCommentaryOn || aiInterval) return;
+            generateRaceCommentary();
+            aiInterval = setInterval(generateRaceCommentary, 15000); // 15秒ごとに実況生成
+        }
+
+        function stopAiCommentaryLoop() {
+            if (aiInterval) {
+                clearInterval(aiInterval);
+                aiInterval = null;
+            }
+        }
+
+        async function callGemini(text) {
+            if (!apiKey) return "APIキーが設定されていないため、AI実況は生成されません。";
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = { contents: [{ parts: [{ text: text }] }] };
+            const delays = [1000, 2000, 4000];
+            for (let i = 0; i < delays.length; i++) {
+                try {
+                    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (response.ok) {
+                        const data = await response.json();
+                        return data.candidates?.[0]?.content?.parts?.[0]?.text || "実況生成に失敗しました。";
+                    }
+                } catch (e) {}
+                await new Promise(r => setTimeout(r, delays[i]));
+            }
+            return "通信エラーが発生しました。";
+        }
+
+        async function generateRaceCommentary() {
+            if (gpxPoints.length === 0) return;
+            if (!isAiCommentaryOn) return;
+
+            // イベントバッファがあれば全て流す
+            if (raceEvents.length > 0) {
+                raceEvents.forEach(evt => spawnNicoComment(evt));
+                raceEvents = [];
+                return;
+            }
+
+            // キュー/イベントがない場合はランダム実況生成
+            const sortedRunners = [...runners].sort((a, b) => b.idx - a.idx);
+            const top3 = sortedRunners.slice(0, 3).map((r, i) => {
+                const dist = gpxPoints[Math.floor(r.idx)] ? (gpxPoints[Math.floor(r.idx)].totalDist / 1000).toFixed(1) : 0;
+                return `${i+1}位:${r.name}(${dist}km)`;
+            }).join(", ");
+
+            const prompt = `
+                あなたは伊豆トレイルジャーニー(ITJ)の実況アナウンサーです。
+                
+                【現在の状況】
+                経過時刻: ${document.getElementById('raceTimer').textContent}
+                トップ集団: ${top3}
+                
+                特段のイベントは発生していません。
+                レース中の雰囲気や、選手たちの心境、または伊豆の自然について
+                **40文字以内**で、ユーモアを交えた短い実況コメントを1つ作成してください。
+                ランナー名は呼び捨てにしてください。「選手」は付けないでください。
+                HTMLタグは不可。
+            `;
+
+            let commentary = "";
+            let apiSuccess = false;
+
+            if (apiKey) {
+                try {
+                    const result = await callGemini(prompt);
+                    if (!result.includes("通信エラー") && !result.includes("失敗")) {
+                        commentary = result;
+                        apiSuccess = true;
+                    }
+                } catch (e) { console.warn(e); }
+            }
+
+            if (!apiSuccess) {
+                const phrases = [
+                    "さあ、レースは中盤戦！",
+                    "美しい伊豆の山々を駆け抜ける！",
+                    "上り坂、太ももが悲鳴を上げている！",
+                    "下り坂、転倒注意！",
+                    "エイドでしっかり補給を！",
+                    "絶景の稜線トレイル！",
+                    "ここが踏ん張りどころ！",
+                    "一歩一歩、ゴールへ！",
+                    "古道の雰囲気を感じて！",
+                    "自分との戦いだ！"
+                ];
+                commentary = phrases[Math.floor(Math.random() * phrases.length)];
+            }
+            spawnNicoComment(commentary);
+        }
+
+        // --- 初期化 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            loadGpxFile();
+            addComments();
+        });
+
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([34.86, 138.91], 11);
+            L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
+                maxZoom: 18,
+                attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+            }).addTo(map);
+            addLegend();
+
+            map.on('click', function(e) {
+                if (gpxPoints.length === 0) return;
+                let nearestPoint = null;
+                let minDistance = Infinity;
+                gpxPoints.forEach(p => {
+                    const dist = map.distance([e.latlng.lat, e.latlng.lng], [p.lat, p.lon]);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        nearestPoint = p;
+                    }
+                });
+                if (nearestPoint && minDistance < 500) {
+                    const distKm = (nearestPoint.totalDist / 1000).toFixed(1);
+                    L.popup().setLatLng([nearestPoint.lat, nearestPoint.lon])
+                        .setContent(`<div class="text-center font-sans"><span class="text-blue-600 font-bold text-lg">${distKm} km地点</span></div>`).openOn(map);
+                }
+            });
+
+            const uiElements = [
+                document.getElementById('raceStatus'),
+                document.getElementById('elevationChartContainer'),
+                document.getElementById('playerControls'),
+                document.getElementById('bottomRightControls')
+            ];
+            uiElements.forEach(el => {
+                if (el) {
+                    L.DomEvent.disableClickPropagation(el);
+                    L.DomEvent.disableScrollPropagation(el);
+                }
+            });
+        }
+
+        function addComments() {
+            if (commentLayer) map.removeLayer(commentLayer);
+            commentLayer = L.featureGroup();
+            courseComments.forEach(comment => {
+                const marker = L.marker([comment.lat, comment.lon])
+                    .bindPopup(comment.text, { className: 'comment-popup', closeButton: false, autoClose: false });
+                marker.addTo(commentLayer);
+            });
+            commentLayer.addTo(map);
+        }
+
+        function loadGpxFile() {
+            fetch(GPX_FILE_URL)
+                .then(r => r.ok ? r.text() : Promise.reject(r.status))
+                .then(text => processGPX(text))
+                .catch(() => {
+                    console.warn("外部GPX読み込み失敗。サンプルを使用。");
+                    processGPX(sampleGpxData);
+                });
+        }
+
+        function identifyAidStations() {
+            checkpointIndices = [];
+            checkpointIndices.push(0); // Start
+            const targetKeywords = CHECKPOINT_KEYWORDS.slice(1, 5);
+            targetKeywords.forEach(keyword => {
+                const comment = courseComments.find(c => c.text.includes(keyword));
+                if (comment) {
+                    let minDist = Infinity;
+                    let closestIdx = -1;
+                    gpxPoints.forEach((p, i) => {
+                        const d = map.distance([comment.lat, comment.lon], [p.lat, p.lon]);
+                        if (d < minDist) { minDist = d; closestIdx = i; }
+                    });
+                    checkpointIndices.push(closestIdx);
+                } else {
+                    checkpointIndices.push(checkpointIndices[checkpointIndices.length-1]);
+                }
+            });
+            checkpointIndices.push(gpxPoints.length - 1); // Goal
+        }
+
+        async function initRunners() {
+            runners.forEach(r => { if(r.marker) map.removeLayer(r.marker); });
+            runners = [];
+            const startPt = gpxPoints[0] || {lat:0, lon:0};
+            lastRankMap = {};
+
+            const runnerPromises = RUNNER_CONFIGS.map(async (config, i) => {
+                const iconUrl = await getIconUrl(config);
+                const icon = L.icon({ iconUrl: iconUrl, iconSize: [40, 40], iconAnchor: [20, 20], className: 'custom-runner-icon' });
+                const marker = L.marker([startPt.lat, startPt.lon], { icon: icon, zIndexOffset: 2000 - (i * 100) }).addTo(map);
+                marker.bindTooltip(config.name, { permanent: false, direction: 'top', className: 'text-xs font-bold' });
+                marker.on('click', () => changeFollowedRunner(i));
+                const scheduleSecs = config.times.map(t => timeStrDiff(t));
+                return {
+                    id: i, name: config.name, color: config.color, schedule: scheduleSecs, finishTime: config.times[config.times.length-1],
+                    idx: 0, state: 'run', restedStations: new Set(), finished: false, marker: marker, lastCheckpointIdx: -1 
+                };
+            });
+            runners = await Promise.all(runnerPromises);
+            runners.forEach((r, i) => { lastRankMap[r.id] = i; });
+            document.getElementById('raceStatus').style.display = 'block';
+            updateLeaderboard();
+        }
+
+        function processGPX(xmlString) {
+            try {
+                if (currentTrackLayer) { map.removeLayer(currentTrackLayer); currentTrackLayer = null; }
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+                const trkpts = xmlDoc.getElementsByTagName("trkpt");
+                if (trkpts.length === 0) return alert("トラックデータがありません");
+
+                let rawPoints = [];
+                for (let i = 0; i < trkpts.length; i++) {
+                    const lat = parseFloat(trkpts[i].getAttribute("lat"));
+                    const lon = parseFloat(trkpts[i].getAttribute("lon"));
+                    const ele = parseFloat(trkpts[i].getElementsByTagName("ele")[0]?.textContent || 0);
+                    rawPoints.push({ lat, lon, ele });
+                }
+                if (REVERSE_GPX_ORDER) rawPoints.reverse();
+
+                const interpolatedPoints = [];
+                const INTERVAL = 10; 
+                if (rawPoints.length > 0) {
+                    interpolatedPoints.push(rawPoints[0]);
+                    for (let i = 0; i < rawPoints.length - 1; i++) {
+                        const p1 = rawPoints[i];
+                        const p2 = rawPoints[i+1];
+                        const dist = map.distance([p1.lat, p1.lon], [p2.lat, p2.lon]);
+                        if (dist > INTERVAL) {
+                            const steps = Math.floor(dist / INTERVAL);
+                            for (let j = 1; j <= steps; j++) {
+                                const ratio = j / (steps + 1);
+                                const lat = p1.lat + (p2.lat - p1.lat) * ratio;
+                                const lon = p1.lon + (p2.lon - p1.lon) * ratio;
+                                const ele = p1.ele + (p2.ele - p1.ele) * ratio;
+                                interpolatedPoints.push({ lat, lon, ele });
+                            }
+                        }
+                        interpolatedPoints.push(p2);
+                    }
+                }
+
+                const points = [];
+                let totalDist = 0;
+                minEle = Infinity;
+                maxEle = -Infinity;
+                for (let i = 0; i < interpolatedPoints.length; i++) {
+                    const p = interpolatedPoints[i];
+                    if (i > 0) {
+                        const prev = interpolatedPoints[i-1];
+                        totalDist += map.distance([prev.lat, prev.lon], [p.lat, p.lon]);
+                    }
+                    if (p.ele < minEle) minEle = p.ele;
+                    if (p.ele > maxEle) maxEle = p.ele;
+                    points.push({ lat: p.lat, lon: p.lon, ele: p.ele, totalDist: totalDist });
+                }
+
+                gpxPoints = points;
+                routeTotalDistance = totalDist;
+                document.getElementById('totalDistDisplay').textContent = "/ " + (totalDist / 1000).toFixed(1) + "km";
+                document.getElementById('progressSlider').max = 100; 
+
+                drawColoredTrack(points);
+                drawElevationChart(points);
+                identifyAidStations(); 
+                initRunners(); 
+                addComments(); 
+                // ズームレベルを15から13に変更（少し離す）
+                if (points.length > 0) map.setView([points[0].lat, points[0].lon], 13);
+
+            } catch (err) { console.error(err); alert("GPX読み込み失敗"); }
+        }
+
+        function drawElevationChart(points) {
+            const path = document.getElementById('elevationPath');
+            if (points.length < 2) return;
+            let d = `M 0,100 `;
+            const eleRange = maxEle - minEle;
+            const eleBottom = minEle - eleRange * 0.1;
+            const eleHeight = eleRange * 1.2; 
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i];
+                const x = (p.totalDist / routeTotalDistance) * 100;
+                const y = 100 - ((p.ele - eleBottom) / eleHeight) * 100;
+                d += `L ${x.toFixed(2)},${y.toFixed(2)} `;
+            }
+            d += `L 100,100 Z`;
+            path.setAttribute('d', d);
+        }
+
+        function drawColoredTrack(points) {
+            if (currentTrackLayer) map.removeLayer(currentTrackLayer);
+            currentTrackLayer = L.featureGroup();
+            const canvasRenderer = L.canvas({ padding: 0.5 });
+            for (let i = 0; i < points.length - 1; i++) {
+                const p1 = points[i];
+                const p2 = points[i+1];
+                const eleDiff = p2.ele - p1.ele;
+                const dist = p2.totalDist - p1.totalDist;
+                let color = "#66bd63";
+                if (dist > 0) {
+                    const gradient = (eleDiff / dist) * 100;
+                    if (gradient >= 5) color = "#d73027";
+                    else if (gradient >= 1) color = "#fc8d59";
+                    else if (gradient > -1) color = "#66bd63";
+                    else if (gradient > -5) color = "#4575b4";
+                    else color = "#313695";
+                }
+                L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], { color: color, weight: 5, opacity: 0.8, renderer: canvasRenderer }).addTo(currentTrackLayer);
+            }
+            currentTrackLayer.addTo(map);
+        }
+
+        function addLegend() {
+            const legend = L.control({position: 'topright'});
+            legend.onAdd = function () {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = `<div style="font-weight:bold; margin-bottom:4px; border-bottom:1px solid #ddd;">勾配</div><div><i style="background: #d73027"></i> 急な上り</div><div><i style="background: #fc8d59"></i> 上り</div><div><i style="background: #66bd63"></i> 平坦</div><div><i style="background: #4575b4"></i> 下り</div><div><i style="background: #313695"></i> 急な下り</div>`;
+                return div;
+            };
+            legend.addTo(map);
+        }
+
+        function checkCustomEvents() {
+            CUSTOM_EVENTS.forEach(event => {
+                if (event.fired) return; 
+                let shouldFire = false;
+                if (event.type === 'time') {
+                    if (elapsedTime >= event.seconds) shouldFire = true;
+                }
+                else if (event.type === 'distance') {
+                    const targetDist = event.km * 1000;
+                    const r = runners.find(runner => runner.name === event.who);
+                    if (r) {
+                        const currentDist = gpxPoints[Math.floor(r.idx)] ? gpxPoints[Math.floor(r.idx)].totalDist : 0;
+                        if (currentDist >= targetDist && !r.finished) shouldFire = true;
+                    }
+                }
+                else if (event.type === 'location') {
+                    const r = runners.find(runner => runner.name === event.who);
+                    if (r) {
+                        const currentP = gpxPoints[Math.floor(r.idx)];
+                        const comment = courseComments.find(c => c.text.includes(event.keyword));
+                        if (currentP && comment) {
+                            const dist = map.distance([currentP.lat, currentP.lon], [comment.lat, comment.lon]);
+                            if (dist < 100 && !r.finished) shouldFire = true;
+                        }
+                    }
+                }
+                if (shouldFire) {
+                    spawnNicoComment(event.text);
+                    event.fired = true;
+                }
+            });
+        }
+
+        function animLoop() {
+            if (!isPlaying) return;
+            let anyoneRunning = false;
+            elapsedTime += FRAME_DURATION * PLAY_SPEED; 
+            updateTimerDisplay();
+            runners.forEach(r => {
+                if (r.finished) return;
+                anyoneRunning = true;
+                updateRunnerPosition(r);
+            });
+            checkCustomEvents();
+            if (!anyoneRunning) {
+                isPlaying = false;
+                updatePlayerUI();
+                updateLeaderboard(); 
+                showResultModal(); 
+                return;
+            }
+            updatePlayerUI();
+            checkAndShowComment();
+            updateLeaderboard();
+            animReqId = requestAnimationFrame(animLoop);
+        }
+
+        function updateRunnerPosition(r) {
+            const startSec = r.schedule[0];
+            const goalSec = r.schedule[r.schedule.length - 1];
+            if (elapsedTime < startSec) { r.idx = 0; r.state = 'stop'; return; }
+            r.state = 'run';
+            if (elapsedTime >= goalSec) {
+                r.idx = gpxPoints.length - 1; r.finished = true; r.state = 'stop';
+                if (!r.finishEventEmitted) {
+                    spawnNicoComment(`【ゴール】${r.name}がゴールしました！タイム: ${r.finishTime}`);
+                    r.finishEventEmitted = true;
+                }
+                return;
+            }
+            let sectionIndex = -1;
+            for (let i = 0; i < r.schedule.length - 1; i++) {
+                if (elapsedTime >= r.schedule[i] && elapsedTime < r.schedule[i+1]) { sectionIndex = i; break; }
+            }
+            if (sectionIndex !== -1) {
+                const t1 = r.schedule[sectionIndex];
+                const t2 = r.schedule[sectionIndex + 1];
+                const idx1 = checkpointIndices[sectionIndex];
+                const idx2 = checkpointIndices[sectionIndex + 1];
+                
+                // エイド休憩ロジックの追加
+                const restDuration = CHECKPOINT_REST_DURATIONS[sectionIndex] || 0;
+                const totalDuration = t2 - t1;
+                const actualRest = Math.min(restDuration, totalDuration * 0.8);
+                const moveDuration = totalDuration - actualRest;
+                
+                if (elapsedTime < t1 + actualRest) {
+                    r.idx = idx1;
+                    r.state = 'stop';
+                } else {
+                    r.state = 'run';
+                    const moveElapsed = elapsedTime - (t1 + actualRest);
+                    const ratio = moveElapsed / moveDuration;
+                    r.idx = idx1 + (idx2 - idx1) * ratio;
+                }
+            }
+            const currentIdx = Math.floor(r.idx);
+            r.lastCheckpointIdx = currentIdx;
+        }
+
+        function updatePlayerUI() {
+            if (!runners || runners.length === 0) return; 
+            runners.forEach(r => {
+                const i = Math.floor(r.idx);
+                const p = gpxPoints[i];
+                if (p) {
+                    r.marker.setLatLng([p.lat, p.lon]);
+                    r.marker.setOpacity(r.state === 'stop' ? 0.5 : 1.0);
+                }
+            });
+            const me = runners.find(r => r.id === followedRunnerId) || runners[0];
+            if (!me) return; 
+            const myP = gpxPoints[Math.floor(me.idx)];
+            if (myP) {
+                map.panTo([myP.lat, myP.lon], { animate: false }); 
+                const percent = (me.idx / (gpxPoints.length - 1)) * 100;
+                document.getElementById('progressSlider').value = percent;
+                document.getElementById('currentDistDisplay').textContent = (myP.totalDist / 1000).toFixed(1) + "km";
+                const chartMarker = document.getElementById('elevationMarker');
+                if (chartMarker) {
+                    const eleRange = maxEle - minEle;
+                    const eleBottom = minEle - eleRange * 0.1;
+                    const eleHeight = eleRange * 1.2;
+                    const x = (myP.totalDist / routeTotalDistance) * 100;
+                    const y = 100 - ((myP.ele - eleBottom) / eleHeight) * 100;
+                    chartMarker.style.display = 'block';
+                    chartMarker.setAttribute('cx', x + '%');
+                    chartMarker.setAttribute('cy', y + '%');
+                    document.getElementById('currentEleDisplay').textContent = Math.round(myP.ele) + "m";
+                }
+            }
+        }
+
+        function updateTimerDisplay() {
+            document.getElementById('raceTimer').textContent = formatElapsedTime(elapsedTime);
+        }
+
+        function updateLeaderboard() {
+            const sortedRunners = [...runners].sort((a, b) => {
+                if (a.finished && b.finished) return timeStrDiff(a.finishTime) - timeStrDiff(b.finishTime);
+                if (a.finished) return -1; if (b.finished) return 1; return b.idx - a.idx;
+            });
+            sortedRunners.forEach((r, index) => { lastRankMap[r.id] = index; });
+            let html = '<div class="flex flex-col gap-1">';
+            sortedRunners.forEach((r, i) => {
+                let statusText = r.finished ? `<span class="text-red-600 font-bold">Goal! ${r.finishTime}</span>` : `${(gpxPoints[Math.floor(r.idx)] ? (gpxPoints[Math.floor(r.idx)].totalDist / 1000).toFixed(1) : "0.0")}km ${r.state === 'stop' ? "=ﾘﾑﾞ" : "<ﾘﾃﾟ"}`;
+                const style = r.id === followedRunnerId ? "font-weight:bold; color:#2563eb; background-color: rgba(37, 99, 235, 0.1);" : "color:#444; cursor:pointer;";
+                const onClick = `onclick="changeFollowedRunner(${r.id})"`;
+                html += `<div ${onClick} style="${style} display:flex; justify-content:space-between; align-items:center; padding: 2px 4px; border-radius: 4px;"><span>${i+1}. <span style="color:${r.color}">●</span> ${r.name}</span><span style="font-size:10px; margin-left:8px;">${statusText}</span></div>`;
+            });
+            html += '</div>';
+            document.getElementById('leaderboardContent').innerHTML = html;
+        }
+
+        function checkAndShowComment() {
+            const me = runners.find(r => r.id === followedRunnerId) || runners[0];
+            const currentP = gpxPoints[Math.floor(me.idx)];
+            if (!currentP) return;
+            courseComments.forEach((c) => {
+                const dist = map.distance([currentP.lat, currentP.lon], [c.lat, c.lon]);
+                if (dist < 150) L.popup({ autoClose: true, closeOnClick: false, offset: [0, -10] }).setLatLng([c.lat, c.lon]).setContent(c.text).openOn(map);
+            });
+        }
+    </script>
+</body>
+</html>
